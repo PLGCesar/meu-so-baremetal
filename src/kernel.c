@@ -7,35 +7,29 @@
 static char input_buffer[32];
 static int input_index = 0;
 
-// Função de renderização completa da Interface Gráfica (GUI)
 void render_gui(void) {
-    // 1. Fundo do Desktop (Dark Mode)
+    // Desenha tudo no Back Buffer na RAM (invisível)
     gfx_clear(COLOR_DARK_SLATE);
 
-    // 2. Barra de Tarefas (Taskbar inferior)
     gfx_draw_rect(0, 560, 800, 40, COLOR_NAVY);
     gfx_draw_rect(10, 565, 80, 30, COLOR_BLUE);
     gfx_draw_string("START", 30, 576, COLOR_NAVY);
     gfx_draw_string("BARE-METAL OS 800X600", 590, 576, COLOR_WHITE);
 
-    // 3. Janela Principal
     int win_x = 80, win_y = 50, win_w = 640, win_h = 480;
 
-    gfx_draw_rect(win_x + 8, win_y + 8, win_w, win_h, 0x11111B); // Sombra
-    gfx_draw_rect(win_x, win_y, win_w, win_h, COLOR_GRAY);        // Corpo
-    gfx_draw_rect(win_x, win_y, win_w, 30, COLOR_LIGHT_GRAY);    // Barra
+    gfx_draw_rect(win_x + 8, win_y + 8, win_w, win_h, 0x11111B);
+    gfx_draw_rect(win_x, win_y, win_w, win_h, COLOR_GRAY);
+    gfx_draw_rect(win_x, win_y, win_w, 30, COLOR_LIGHT_GRAY);
     gfx_draw_string("SISTEMA OPERACIONAL (GUI + TECLADO + MOUSE)", win_x + 15, win_y + 11, COLOR_WHITE);
 
-    // Botões
     gfx_draw_rect(win_x + win_w - 25, win_y + 7, 16, 16, COLOR_RED);
     gfx_draw_rect(win_x + win_w - 45, win_y + 7, 16, 16, COLOR_BLUE);
 
-    // --- PAINEL DO TECLADO ---
     gfx_draw_string("DIGITE NO SEU TECLADO:", win_x + 30, win_y + 45, COLOR_GREEN);
     gfx_draw_rect(win_x + 30, win_y + 68, 580, 35, COLOR_NAVY);
     gfx_draw_string(input_buffer, win_x + 40, win_y + 80, COLOR_WHITE);
 
-    // --- PAINEL DO MOUSE ---
     gfx_draw_string("COORDENADAS DO MOUSE EM TEMPO REAL:", win_x + 30, win_y + 120, COLOR_BLUE);
     gfx_draw_string("X: ", win_x + 30, win_y + 145, COLOR_WHITE);
     gfx_draw_number(mouse_x, win_x + 50, win_y + 145, COLOR_GREEN);
@@ -47,7 +41,6 @@ void render_gui(void) {
         gfx_draw_string("CLIQUE ESQUERDO ATIVO!", win_x + 240, win_y + 145, COLOR_RED);
     }
 
-    // --- PAINEL DO GERENCIADOR DE MEMÓRIA ---
     gfx_draw_rect(win_x + 30, win_y + 185, win_w - 60, 260, COLOR_NAVY);
     gfx_draw_string("STATUS DA MEMORIA HEAP (RAM):", win_x + 50, win_y + 205, COLOR_WHITE);
 
@@ -62,24 +55,27 @@ void render_gui(void) {
     gfx_draw_string("TOTAL BLOCOS HEAP: ", win_x + 50, win_y + 325, COLOR_WHITE);
     gfx_draw_number((int)memory_get_block_count(), win_x + 220, win_y + 325, COLOR_WHITE);
 
-    gfx_draw_string("LOG SERIAL (COM1): ATIVO EM 0X3F8", win_x + 50, win_y + 375, COLOR_GREEN);
+    gfx_draw_string("DOUBLE BUFFERING: ATIVO (ZERO FLICKERING!)", win_x + 50, win_y + 375, COLOR_GREEN);
 
-    // 4. DESENHA O PONTEIRO DO MOUSE VISUAL
     gfx_draw_cursor(mouse_x, mouse_y);
+
+    // COPIA O QUADRO PRONTO DA RAM PARA A PLACA DE VÍDEO SEM PISCAR!
+    gfx_swap_buffers();
 }
 
 void kernel_main(multiboot_info_t* mbi) {
     serial_init();
-    serial_write("[LOG SERIAL] INICIALIZANDO KERNEL BARE-METAL v0.4\n");
+    serial_write("[LOG SERIAL] INICIALIZANDO KERNEL BARE-METAL v0.5\n");
 
-    gfx_init(mbi);
-    serial_write("[LOG SERIAL] [OK] Driver Grafico VBE 800x600 TrueColor\n");
-
+    // IMPORTANTE: memory_init é chamado ANTES para o kmalloc funcionar no gfx_init!
     memory_init(mbi);
     serial_write("[LOG SERIAL] [OK] Gerenciador de Memoria Heap Avançado\n");
 
+    gfx_init(mbi);
+    serial_write("[LOG SERIAL] [OK] Driver Grafico VBE com Double Buffering\n");
+
     idt_init();
-    serial_write("[LOG SERIAL] [OK] Tabela IDT, Teclado PS/2 e Mouse PS/2\n");
+    serial_write("[LOG SERIAL] [OK] Interrupcoes Teclado e Mouse PS/2\n");
 
     void* p1 = kmalloc(256);
     void* p2 = kmalloc(512);

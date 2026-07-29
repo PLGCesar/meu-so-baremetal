@@ -23,4 +23,7 @@ void gfx_draw_string(const char* str, int x, int y, uint32_t color);
 void gfx_draw_number(int num, int x, int y, uint32_t color);
 void gfx_draw_cursor(int x, int y);
 
+// TROCA DE BUFFERS (ELIMINA O PISCA-PISCA TOTALMENTE)
+void gfx_swap_buffers(void);
+
 #endif

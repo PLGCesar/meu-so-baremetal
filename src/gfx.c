@@ -1,6 +1,8 @@
 #include "../include/gfx.h"
+#include "../include/memory.h"
 
 static uint32_t* framebuffer = 0;
+static uint32_t* back_buffer = 0;
 static uint32_t width = 800;
 static uint32_t height = 600;
 static uint32_t pitch = 3200;
@@ -25,7 +27,7 @@ static uint32_t pci_read_config(uint8_t bus, uint8_t slot, uint8_t func, uint8_t
     return inl(0x0CFC);
 }
 
-// FONTE BITMAP 8x8 COMPLETA E CORRIGIDA (SEM ESPELHAMENTO)
+// Fonte Bitmap 8x8 completa
 static const uint8_t font8x8_basic[128][8] = {
     ['A'] = {0x18, 0x3C, 0x66, 0x66, 0x7E, 0x66, 0x66, 0x00},
     ['B'] = {0x7C, 0x66, 0x66, 0x7C, 0x66, 0x66, 0x7C, 0x00},
@@ -86,17 +88,33 @@ void gfx_init(multiboot_info_t* mbi) {
         if ((id & 0xFFFF) == 0x1234) {
             uint32_t bar0 = pci_read_config(0, slot, 0, 0x10);
             framebuffer = (uint32_t*)(uintptr_t)(bar0 & 0xFFFFFFF0);
-            return;
+            break;
         }
     }
-    framebuffer = (uint32_t*)0xFD000000;
+    if (!framebuffer) framebuffer = (uint32_t*)0xFD000000;
+
+    // ALOCA O BACK BUFFER NA RAM PARA EVITAR O PISCA-PISCA (1.92 MB)
+    back_buffer = (uint32_t*)kmalloc(width * height * sizeof(uint32_t));
 }
 
+// Desenha na memória RAM (back_buffer)
 void gfx_put_pixel(int x, int y, uint32_t color) {
-    if (!framebuffer) return;
+    if (!back_buffer) return;
     if (x < 0 || (uint32_t)x >= width || y < 0 || (uint32_t)y >= height) return;
-    uint32_t* pixel = (uint32_t*)((uint8_t*)framebuffer + (y * pitch) + (x * 4));
-    *pixel = color;
+    back_buffer[y * width + x] = color;
+}
+
+// COPIA O QUADRO PRONTO DA RAM PARA A PLACA DE VÍDEO SEM FLICKERING!
+void gfx_swap_buffers(void) {
+    if (!framebuffer || !back_buffer) return;
+
+    for (uint32_t y = 0; y < height; y++) {
+        uint32_t* src = &back_buffer[y * width];
+        uint32_t* dst = (uint32_t*)((uint8_t*)framebuffer + (y * pitch));
+        for (uint32_t x = 0; x < width; x++) {
+            dst[x] = src[x];
+        }
+    }
 }
 
 void gfx_clear(uint32_t color) {
@@ -115,10 +133,9 @@ void gfx_draw_rect(int x, int y, int w, int h, uint32_t color) {
     }
 }
 
-// CORREÇÃO CRUCIAL DA ORIENTAÇÃO DAS LETRAS: (1 << cx)
 void gfx_draw_char(char c, int x, int y, uint32_t color) {
     unsigned char uc = (unsigned char)c;
-    if (uc >= 'a' && uc <= 'z') uc -= 32; // Converte minúscula para maiúscula
+    if (uc >= 'a' && uc <= 'z') uc -= 32;
     const uint8_t* glyph = font8x8_basic[uc];
     for (int cy = 0; cy < 8; cy++) {
         for (int cx = 0; cx < 8; cx++) {
@@ -150,7 +167,6 @@ void gfx_draw_number(int num, int x, int y, uint32_t color) {
     gfx_draw_string(buf, x, y, color);
 }
 
-// DESENHO DO PONTEIRO DO MOUSE (SETA VISUAL)
 const char* cursor_sprite[16] = {
     "*           ",
     "**          ",
