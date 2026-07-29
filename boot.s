@@ -101,3 +101,16 @@ irq12_stub:
     pop %ds
     popa
     iret
+
+/* =======================================================
+   EMBUTINDO O DISCO DISK.IMG DIRETO NO BOOT.S
+   ======================================================= */
+.section .data
+.align 4
+
+.global disk_start
+.global disk_end
+
+disk_start:
+    .incbin "disk.img"
+disk_end:
