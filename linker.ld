@@ -5,9 +5,13 @@ SECTIONS
 	. = 1M;
 	_kernel_start = .;
 
+	.multiboot : ALIGN(4)
+	{
+		KEEP(*(.multiboot))
+	}
+
 	.text BLOCK(4K) : ALIGN(4K)
 	{
-		*(.multiboot)
 		*(.text)
 	}
 
@@ -27,6 +31,5 @@ SECTIONS
 		*(.bss)
 	}
 
-	/* Marca o fim exato do Kernel na RAM para o nosso Alocador de Memória usar */
 	_kernel_end = .;
 }

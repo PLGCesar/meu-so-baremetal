@@ -10,7 +10,7 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /os
 
-CMD gcc -m32 -c boot.s -o boot.o && \
+CMD gcc -m32 -c boot.s -o boot.o -fno-pie -fno-pic && \
     gcc -m32 -c src/gfx.c -o gfx.o -Iinclude -ffreestanding -fno-pie -fno-pic -O2 -Wall -Wextra && \
     gcc -m32 -c src/memory.c -o memory.o -Iinclude -ffreestanding -fno-pie -fno-pic -O2 -Wall -Wextra && \
     gcc -m32 -c src/idt.c -o idt.o -Iinclude -ffreestanding -fno-pie -fno-pic -O2 -Wall -Wextra && \
