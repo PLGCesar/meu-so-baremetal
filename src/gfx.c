@@ -3,7 +3,7 @@
 static uint32_t* framebuffer = 0;
 static uint32_t width = 800;
 static uint32_t height = 600;
-static uint32_t pitch = 3200; // 800 * 4 bytes em 32bpp
+static uint32_t pitch = 3200;
 
 // Fonte de texto Bitmap 8x8 incorporada
 static const uint8_t font8x8_basic[128][8] = {
@@ -37,7 +37,7 @@ static const uint8_t font8x8_basic[128][8] = {
 };
 
 void gfx_init(multiboot_info_t* mbi) {
-    // 1. Tenta pegar o endereço do Framebuffer da estrutura VBE Mode Info do GRUB
+    // 1. Tenta obter o Framebuffer via estrutura VBE
     if (mbi->vbe_mode_info != 0) {
         vbe_mode_info_t* vbe = (vbe_mode_info_t*)(uintptr_t)mbi->vbe_mode_info;
         if (vbe && vbe->physbase != 0) {
@@ -45,16 +45,23 @@ void gfx_init(multiboot_info_t* mbi) {
             width = vbe->width;
             height = vbe->height;
             pitch = vbe->pitch;
-            return;
         }
     }
 
-    // 2. Fallback de emergência
-    if (mbi->framebuffer_addr != 0) {
+    // 2. Fallback via Multiboot Framebuffer
+    if (!framebuffer && mbi->framebuffer_addr != 0) {
         framebuffer = (uint32_t*)(uintptr_t)mbi->framebuffer_addr;
         width = mbi->framebuffer_width;
         height = mbi->framebuffer_height;
         pitch = mbi->framebuffer_pitch;
+    }
+
+    // 3. Fallback inteligente do QEMU VBE (Garante funcionamento em emuladores Bochs/QEMU)
+    if (!framebuffer) {
+        framebuffer = (uint32_t*)0xFD000000; // Endereço físico padrão VBE no QEMU
+        width = 800;
+        height = 600;
+        pitch = 3200;
     }
 }
 
@@ -62,7 +69,6 @@ void gfx_put_pixel(int x, int y, uint32_t color) {
     if (!framebuffer) return;
     if (x < 0 || (uint32_t)x >= width || y < 0 || (uint32_t)y >= height) return;
     
-    // Cálculo exato do pixel usando o pitch em bytes da placa de vídeo
     uint32_t* pixel = (uint32_t*)((uint8_t*)framebuffer + (y * pitch) + (x * 4));
     *pixel = color;
 }
