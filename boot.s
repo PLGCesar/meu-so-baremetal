@@ -1,7 +1,8 @@
-/* Padrão Multiboot 1 */
+/* Multiboot 1 com solicitação de Modo Gráfico */
 .set ALIGN,    1<<0
 .set MEMINFO,  1<<1
-.set FLAGS,    ALIGN | MEMINFO
+.set GRAPHICS, 1<<2
+.set FLAGS,    ALIGN | MEMINFO | GRAPHICS
 .set MAGIC,    0x1BADB002
 .set CHECKSUM, -(MAGIC + FLAGS)
 
@@ -10,6 +11,11 @@
 .long MAGIC
 .long FLAGS
 .long CHECKSUM
+/* Solicitação de Modo Gráfico 800x600x32 bpp ao Bootloader */
+.long 0   /* 0 = Linear Graphics Mode */
+.long 800 /* Largura */
+.long 600 /* Altura */
+.long 32  /* Profundidade de Cores (32-bit RGB) */
 
 .section .bss
 .align 16
@@ -22,45 +28,8 @@ stack_top:
 .type _start, @function
 _start:
 	mov $stack_top, %esp
+	push %ebx            # Passa o ponteiro da estrutura Multiboot para o C!
 	call kernel_main
 	cli
 1:	hlt
 	jmp 1b
-
-/* --- SUPORTE A INTERRUPÇÕES DA CPU E TECLADO --- */
-.global load_idt
-load_idt:
-    mov 4(%esp), %eax
-    lidt (%eax)          # Carrega a tabela IDT na CPU
-    sti                  # Ativa as interrupções na CPU
-    ret
-
-.global irq1_stub
-.extern keyboard_handler_main
-irq1_stub:
-    pusha                # Salva os registradores gerais (EAX, ECX, EDX, EBX, etc.)
-    cld                  # Limpa o Direction Flag (Obrigatório para código C no x86)
-
-    # Salva os registradores de segmento
-    push %ds
-    push %es
-    push %fs
-    push %gs
-
-    # Garante que os segmentos apontam para o Segmento de Dados do Kernel (0x10)
-    mov $0x10, %ax
-    mov %ax, %ds
-    mov %ax, %es
-    mov %ax, %fs
-    mov %ax, %gs
-
-    call keyboard_handler_main
-
-    # Restaura os registradores de segmento
-    pop %gs
-    pop %fs
-    pop %es
-    pop %ds
-
-    popa                 # Restaura os registradores gerais
-    iret                 # Retorna da interrupção em segurança
