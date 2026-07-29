@@ -44,7 +44,7 @@ irq1_stub:
     push %es
     push %fs
     push %gs
-    mov $0x10, %ax
+    mov $0x18, %ax
     mov %ax, %ds
     mov %ax, %es
     mov %ax, %fs
@@ -66,7 +66,7 @@ irq12_stub:
     push %es
     push %fs
     push %gs
-    mov $0x10, %ax
+    mov $0x18, %ax
     mov %ax, %ds
     mov %ax, %es
     mov %ax, %fs

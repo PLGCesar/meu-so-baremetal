@@ -105,8 +105,8 @@ void idt_init(void) {
     for (int i = 0; i < 256; i++) idt_set_gate(i, 0, 0, 0);
 
     pic_remap();
-    idt_set_gate(33, (uint32_t)irq1_stub, 0x08, 0x8E);  // IRQ1 = Teclado
-    idt_set_gate(44, (uint32_t)irq12_stub, 0x08, 0x8E); // IRQ12 = Mouse
+    idt_set_gate(33, (uint32_t)irq1_stub, 0x10, 0x8E);  // IRQ1 = Teclado
+    idt_set_gate(44, (uint32_t)irq12_stub, 0x10, 0x8E); // IRQ12 = Mouse
 
     load_idt(&idtp);
     mouse_init();
