@@ -5,6 +5,28 @@ static uint32_t width = 800;
 static uint32_t height = 600;
 static uint32_t pitch = 3200;
 
+// --- FUNÇÕES DE COMUNICAÇÃO DE HARDWARE (I/O & PCI) ---
+static inline void outw(uint16_t port, uint16_t val) {
+    asm volatile ("outw %0, %1" : : "a"(val), "Nd"(port));
+}
+
+static inline void outl(uint16_t port, uint32_t val) {
+    asm volatile ("outl %0, %1" : : "a"(val), "Nd"(port));
+}
+
+static inline uint32_t inl(uint16_t port) {
+    uint32_t ret;
+    asm volatile ("inl %1, %0" : "=a"(ret) : "Nd"(port));
+    return ret;
+}
+
+// Escaneia os registradores do Barramento PCI da placa-mãe
+static uint32_t pci_read_config(uint8_t bus, uint8_t slot, uint8_t func, uint8_t offset) {
+    uint32_t address = (uint32_t)((bus << 16) | (slot << 11) | (func << 8) | (offset & 0xfc) | 0x80000000);
+    outl(0x0CF8, address);
+    return inl(0x0CFC);
+}
+
 // Fonte de texto Bitmap 8x8 incorporada
 static const uint8_t font8x8_basic[128][8] = {
     ['A'] = {0x0C, 0x1E, 0x33, 0x33, 0x3F, 0x33, 0x33, 0x00},
@@ -37,32 +59,31 @@ static const uint8_t font8x8_basic[128][8] = {
 };
 
 void gfx_init(multiboot_info_t* mbi) {
-    // 1. Tenta obter o Framebuffer via estrutura VBE
-    if (mbi->vbe_mode_info != 0) {
-        vbe_mode_info_t* vbe = (vbe_mode_info_t*)(uintptr_t)mbi->vbe_mode_info;
-        if (vbe && vbe->physbase != 0) {
-            framebuffer = (uint32_t*)(uintptr_t)vbe->physbase;
-            width = vbe->width;
-            height = vbe->height;
-            pitch = vbe->pitch;
+    (void)mbi;
+
+    // 1. FORÇA A PLACA DE VÍDEO BGA DO QEMU A MUDAR PARA 800x600 32-BIT DIRETO VIA PORTA I/O
+    outw(0x01CE, 4); outw(0x01CF, 0);           // Desativa
+    outw(0x01CE, 1); outw(0x01CF, 800);         // Largura: 800
+    outw(0x01CE, 2); outw(0x01CF, 600);         // Altura: 600
+    outw(0x01CE, 3); outw(0x01CF, 32);          // BPP: 32 bits
+    outw(0x01CE, 4); outw(0x01CF, 0x01 | 0x40); // Ativa VBE + Linear Framebuffer!
+
+    width = 800;
+    height = 600;
+    pitch = 800 * 4;
+
+    // 2. ESCANEIA O BARRAMENTO PCI PARA ENCONTRAR O ENDEREÇO DA PLACA DE VÍDEO DO QEMU
+    for (uint8_t slot = 0; slot < 32; slot++) {
+        uint32_t id = pci_read_config(0, slot, 0, 0);
+        if ((id & 0xFFFF) == 0x1234) { // Vendor ID da GPU Bochs/QEMU
+            uint32_t bar0 = pci_read_config(0, slot, 0, 0x10);
+            framebuffer = (uint32_t*)(uintptr_t)(bar0 & 0xFFFFFFF0);
+            return;
         }
     }
 
-    // 2. Fallback via Multiboot Framebuffer
-    if (!framebuffer && mbi->framebuffer_addr != 0) {
-        framebuffer = (uint32_t*)(uintptr_t)mbi->framebuffer_addr;
-        width = mbi->framebuffer_width;
-        height = mbi->framebuffer_height;
-        pitch = mbi->framebuffer_pitch;
-    }
-
-    // 3. Fallback inteligente do QEMU VBE (Garante funcionamento em emuladores Bochs/QEMU)
-    if (!framebuffer) {
-        framebuffer = (uint32_t*)0xFD000000; // Endereço físico padrão VBE no QEMU
-        width = 800;
-        height = 600;
-        pitch = 3200;
-    }
+    // Fallback padrão do QEMU caso o escaneamento PCI não responda
+    framebuffer = (uint32_t*)0xFD000000;
 }
 
 void gfx_put_pixel(int x, int y, uint32_t color) {
