@@ -5,7 +5,6 @@
 #include <stddef.h>
 #include "multiboot.h"
 
-// Cores pré-definidas em formato ARGB 32-bits
 #define COLOR_DARK_SLATE 0x1E1E2E
 #define COLOR_NAVY       0x181825
 #define COLOR_WHITE      0xFFFFFF
@@ -21,5 +20,7 @@ void gfx_clear(uint32_t color);
 void gfx_draw_rect(int x, int y, int width, int height, uint32_t color);
 void gfx_draw_char(char c, int x, int y, uint32_t color);
 void gfx_draw_string(const char* str, int x, int y, uint32_t color);
+void gfx_draw_number(int num, int x, int y, uint32_t color);
+void gfx_draw_cursor(int x, int y);
 
 #endif
