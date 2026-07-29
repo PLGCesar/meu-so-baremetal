@@ -32,13 +32,35 @@ _start:
 load_idt:
     mov 4(%esp), %eax
     lidt (%eax)          # Carrega a tabela IDT na CPU
-    sti                  # ATIVA INTERRUPÇÕES NA CPU!
+    sti                  # Ativa as interrupções na CPU
     ret
 
 .global irq1_stub
 .extern keyboard_handler_main
 irq1_stub:
-    pusha                # Salva todos os registradores da CPU
+    pusha                # Salva os registradores gerais (EAX, ECX, EDX, EBX, etc.)
+    cld                  # Limpa o Direction Flag (Obrigatório para código C no x86)
+
+    # Salva os registradores de segmento
+    push %ds
+    push %es
+    push %fs
+    push %gs
+
+    # Garante que os segmentos apontam para o Segmento de Dados do Kernel (0x10)
+    mov $0x10, %ax
+    mov %ax, %ds
+    mov %ax, %es
+    mov %ax, %fs
+    mov %ax, %gs
+
     call keyboard_handler_main
-    popa                 # Restaura os registradores
-    iret                 # Retorna da interrupção
+
+    # Restaura os registradores de segmento
+    pop %gs
+    pop %fs
+    pop %es
+    pop %ds
+
+    popa                 # Restaura os registradores gerais
+    iret                 # Retorna da interrupção em segurança

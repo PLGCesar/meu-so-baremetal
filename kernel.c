@@ -17,14 +17,10 @@ static inline void outb(uint16_t port, uint8_t val) {
     asm volatile ("outb %0, %1" : : "a"(val), "Nd"(port));
 }
 
-// --- TERMINAL VGA ---
-static size_t terminal_row;
-static size_t terminal_column;
-static uint8_t terminal_color;
-
-static inline uint8_t vga_entry_color(uint8_t fg, uint8_t bg) {
-    return fg | (bg << 4);
-}
+// --- TERMINAL VGA COM PROTEÇÃO DE LIMITES ---
+static size_t terminal_row = 0;
+static size_t terminal_column = 0;
+static uint8_t terminal_color = 0x0F; // Branco no Preto
 
 static inline uint16_t vga_entry(unsigned char uc, uint8_t color) {
     return (uint16_t) uc | ((uint16_t) color << 8);
@@ -33,7 +29,7 @@ static inline uint16_t vga_entry(unsigned char uc, uint8_t color) {
 void terminal_initialize(void) {
     terminal_row = 0;
     terminal_column = 0;
-    terminal_color = vga_entry_color(15, 0); // Branco no Preto
+    terminal_color = 0x0F;
     for (size_t y = 0; y < VGA_HEIGHT; y++) {
         for (size_t x = 0; x < VGA_WIDTH; x++) {
             VGA_MEMORY[y * VGA_WIDTH + x] = vga_entry(' ', terminal_color);
@@ -54,9 +50,13 @@ void terminal_scroll(void) {
 }
 
 void terminal_putchar(char c) {
+    // Trava de segurança para evitar estouro de tela
+    if (terminal_row >= VGA_HEIGHT) terminal_row = VGA_HEIGHT - 1;
+    if (terminal_column >= VGA_WIDTH) terminal_column = 0;
+
     if (c == '\n') {
         terminal_column = 0;
-        if (++terminal_row == VGA_HEIGHT) {
+        if (++terminal_row >= VGA_HEIGHT) {
             terminal_scroll();
         }
         return;
@@ -64,9 +64,9 @@ void terminal_putchar(char c) {
 
     const size_t index = terminal_row * VGA_WIDTH + terminal_column;
     VGA_MEMORY[index] = vga_entry(c, terminal_color);
-    if (++terminal_column == VGA_WIDTH) {
+    if (++terminal_column >= VGA_WIDTH) {
         terminal_column = 0;
-        if (++terminal_row == VGA_HEIGHT) {
+        if (++terminal_row >= VGA_HEIGHT) {
             terminal_scroll();
         }
     }
@@ -127,7 +127,7 @@ void kprintf(const char* fmt, ...) {
     va_end(args);
 }
 
-// --- GERENCIADOR DE MEMÓRIA (BUMP ALLOCATOR) ---
+// --- GERENCIADOR DE MEMÓRIA ---
 extern uint32_t _kernel_end;
 static uintptr_t heap_curr = 0;
 
@@ -172,12 +172,11 @@ void idt_set_gate(uint8_t num, uint32_t base, uint16_t sel, uint8_t flags) {
 
 void pic_remap(void) {
     outb(0x20, 0x11); outb(0xA0, 0x11);
-    outb(0x21, 0x20); outb(0xA1, 0x28); // Remapeia IRQ0-15 para int 32-47
+    outb(0x21, 0x20); outb(0xA1, 0x28);
     outb(0x21, 0x04); outb(0xA1, 0x02);
     outb(0x21, 0x01); outb(0xA1, 0x01);
 
-    // MASCARA DE INTERRUPÇÃO (0xFD = 1111 1101 em binário)
-    // Isso bloqueia o Timer (IRQ0) e ativa APENAS o Teclado (IRQ1)!
+    // MÁSCARA: Bloqueia o Timer (IRQ0) e ativa APENAS o Teclado (IRQ1)
     outb(0x21, 0xFD);
     outb(0xA1, 0xFF);
 }
@@ -186,20 +185,16 @@ void idt_init(void) {
     idtp.limit = (sizeof(struct idt_entry) * 256) - 1;
     idtp.base = (uint32_t)&idt;
 
-    // Limpa a IDT com zeros
     for (int i = 0; i < 256; i++) {
         idt_set_gate(i, 0, 0, 0);
     }
 
     pic_remap();
-
-    // Registra a interrupção 33 (IRQ1 = Teclado PS/2)
     idt_set_gate(33, (uint32_t)irq1_stub, 0x08, 0x8E);
-
     load_idt(&idtp);
 }
 
-// --- DRIVER DO TECLADO E MINI-SHELL ---
+// --- DRIVER DO TECLADO E SHELL ---
 static char shell_buffer[256];
 static size_t shell_index = 0;
 
@@ -269,7 +264,7 @@ void keyboard_handler_main(void) {
 void kernel_main(void) {
     terminal_initialize();
     memory_init();
-    idt_init(); // Inicializa as Interrupções mascarando o Timer!
+    idt_init();
 
     kprintf("=== SISTEMA OPERACIONAL BARE-METAL (v0.3) ===\n");
     kprintf("Teclado PS/2 e Tabela IDT Carregados com Sucesso!\n\n");
