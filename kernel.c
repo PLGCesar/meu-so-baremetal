@@ -78,7 +78,6 @@ void terminal_write(const char* data) {
     }
 }
 
-// Trata o Backspace (apagar caractere da tela)
 void terminal_backspace(void) {
     if (terminal_column > 0) {
         terminal_column--;
@@ -173,15 +172,24 @@ void idt_set_gate(uint8_t num, uint32_t base, uint16_t sel, uint8_t flags) {
 
 void pic_remap(void) {
     outb(0x20, 0x11); outb(0xA0, 0x11);
-    outb(0x21, 0x20); outb(0xA1, 0x28); // Mapeia IRQ0-15 para interrupções 32-47
+    outb(0x21, 0x20); outb(0xA1, 0x28); // Remapeia IRQ0-15 para int 32-47
     outb(0x21, 0x04); outb(0xA1, 0x02);
     outb(0x21, 0x01); outb(0xA1, 0x01);
-    outb(0x21, 0x00); outb(0xA1, 0x00);
+
+    // MASCARA DE INTERRUPÇÃO (0xFD = 1111 1101 em binário)
+    // Isso bloqueia o Timer (IRQ0) e ativa APENAS o Teclado (IRQ1)!
+    outb(0x21, 0xFD);
+    outb(0xA1, 0xFF);
 }
 
 void idt_init(void) {
     idtp.limit = (sizeof(struct idt_entry) * 256) - 1;
     idtp.base = (uint32_t)&idt;
+
+    // Limpa a IDT com zeros
+    for (int i = 0; i < 256; i++) {
+        idt_set_gate(i, 0, 0, 0);
+    }
 
     pic_remap();
 
@@ -228,7 +236,6 @@ void process_command(void) {
     kprintf("myos> ");
 }
 
-// Tabela de conversão de Scancode PS/2 para Letras ASCII
 const char scancode_ascii[128] = {
     0,  27, '1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '-', '=', '\b',
   '\t', 'q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p', '[', ']', '\n',
@@ -236,14 +243,10 @@ const char scancode_ascii[128] = {
    '\\', 'z', 'x', 'c', 'v', 'b', 'n', 'm', ',', '.', '/',   0, '*',   0, ' '
 };
 
-// Função chamada quando a CPU recebe a interrupção do Teclado (IRQ1)
 void keyboard_handler_main(void) {
-    uint8_t scancode = inb(0x60); // Lê o sinal vindo do chip do teclado
+    uint8_t scancode = inb(0x60);
+    outb(0x20, 0x20); // EOI para o PIC
 
-    // Avisa o PIC que a interrupção foi processada (EOI)
-    outb(0x20, 0x20);
-
-    // Se o bit 7 for 0, significa tecla PRESSIONADA (não solta)
     if (!(scancode & 0x80)) {
         char c = scancode_ascii[scancode];
         if (c == '\n') {
@@ -266,14 +269,13 @@ void keyboard_handler_main(void) {
 void kernel_main(void) {
     terminal_initialize();
     memory_init();
-    idt_init(); // Inicializa as Interrupções e o Teclado!
+    idt_init(); // Inicializa as Interrupções mascarando o Timer!
 
     kprintf("=== SISTEMA OPERACIONAL BARE-METAL (v0.3) ===\n");
     kprintf("Teclado PS/2 e Tabela IDT Carregados com Sucesso!\n\n");
     kprintf("Digite 'help' para ver os comandos.\n\n");
     kprintf("myos> ");
 
-    // Loop infinito mantendo a CPU viva aguardando interrupções
     while (1) {
         asm volatile ("hlt");
     }
