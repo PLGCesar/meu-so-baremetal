@@ -1,11 +1,11 @@
 #include "../include/gfx.h"
 
 static uint32_t* framebuffer = 0;
-static uint32_t width = 0;
-static uint32_t height = 0;
-static uint32_t pitch = 0;
+static uint32_t width = 800;
+static uint32_t height = 600;
+static uint32_t pitch = 3200; // 800 * 4 bytes em 32bpp
 
-// Fonte de texto Bitmap 8x8 simples incorporada
+// Fonte de texto Bitmap 8x8 incorporada
 static const uint8_t font8x8_basic[128][8] = {
     ['A'] = {0x0C, 0x1E, 0x33, 0x33, 0x3F, 0x33, 0x33, 0x00},
     ['B'] = {0x3E, 0x66, 0x66, 0x3E, 0x66, 0x66, 0x3E, 0x00},
@@ -37,16 +37,34 @@ static const uint8_t font8x8_basic[128][8] = {
 };
 
 void gfx_init(multiboot_info_t* mbi) {
-    framebuffer = (uint32_t*)(uintptr_t)mbi->framebuffer_addr;
-    width = mbi->framebuffer_width;
-    height = mbi->framebuffer_height;
-    pitch = mbi->framebuffer_pitch;
+    // 1. Tenta pegar o endereço do Framebuffer da estrutura VBE Mode Info do GRUB
+    if (mbi->vbe_mode_info != 0) {
+        vbe_mode_info_t* vbe = (vbe_mode_info_t*)(uintptr_t)mbi->vbe_mode_info;
+        if (vbe && vbe->physbase != 0) {
+            framebuffer = (uint32_t*)(uintptr_t)vbe->physbase;
+            width = vbe->width;
+            height = vbe->height;
+            pitch = vbe->pitch;
+            return;
+        }
+    }
+
+    // 2. Fallback de emergência
+    if (mbi->framebuffer_addr != 0) {
+        framebuffer = (uint32_t*)(uintptr_t)mbi->framebuffer_addr;
+        width = mbi->framebuffer_width;
+        height = mbi->framebuffer_height;
+        pitch = mbi->framebuffer_pitch;
+    }
 }
 
 void gfx_put_pixel(int x, int y, uint32_t color) {
+    if (!framebuffer) return;
     if (x < 0 || (uint32_t)x >= width || y < 0 || (uint32_t)y >= height) return;
-    uint32_t index = y * (pitch / 4) + x;
-    framebuffer[index] = color;
+    
+    // Cálculo exato do pixel usando o pitch em bytes da placa de vídeo
+    uint32_t* pixel = (uint32_t*)((uint8_t*)framebuffer + (y * pitch) + (x * 4));
+    *pixel = color;
 }
 
 void gfx_clear(uint32_t color) {
