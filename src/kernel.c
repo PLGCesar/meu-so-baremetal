@@ -4,62 +4,198 @@
 #include "../include/idt.h"
 #include "../include/serial.h"
 
+// ESTADO DA JANELA
+static int win_x = 100, win_y = 60, win_w = 600, win_h = 450;
+static int win_open = 1;
+static int is_dragging = 0;
+static int drag_off_x = 0, drag_off_y = 0;
+
+// ESTADO DO MENU START
+static int start_menu_open = 0;
+static int active_app = 0; // 0 = Shell, 1 = Memoria, 2 = IDT
+
+// ESTADO DO SHELL (CLI)
 static char input_buffer[32];
 static int input_index = 0;
+static char shell_output[64] = "BEM VINDO AO TERMINAL BARE-METAL! DIGITE 'HELP'.";
 
-void render_gui(void) {
-    // Desenha tudo no Back Buffer na RAM (invisível)
-    gfx_clear(COLOR_DARK_SLATE);
+static int prev_mouse_left = 0;
 
-    gfx_draw_rect(0, 560, 800, 40, COLOR_NAVY);
-    gfx_draw_rect(10, 565, 80, 30, COLOR_BLUE);
-    gfx_draw_string("START", 30, 576, COLOR_NAVY);
-    gfx_draw_string("BARE-METAL OS 800X600", 590, 576, COLOR_WHITE);
+int kstrcmp(const char* s1, const char* s2) {
+    while (*s1 && (*s1 == *s2)) { s1++; s2++; }
+    return *(const unsigned char*)s1 - *(const unsigned char*)s2;
+}
 
-    int win_x = 80, win_y = 50, win_w = 640, win_h = 480;
+// PROCESSA COMANDOS DIGITADOS NO SHELL
+void process_shell_command(void) {
+    if (kstrcmp(input_buffer, "help") == 0) {
+        for (int i = 0; i < 64; i++) shell_output[i] = '\0';
+        const char* msg = "COMANDOS: HELP, CLEAR, RAM, PANIC";
+        for (int i = 0; msg[i] != '\0'; i++) shell_output[i] = msg[i];
+    } else if (kstrcmp(input_buffer, "clear") == 0) {
+        shell_output[0] = '\0';
+    } else if (kstrcmp(input_buffer, "ram") == 0) {
+        for (int i = 0; i < 64; i++) shell_output[i] = '\0';
+        const char* msg = "RAM DISPONIVEL NO HEAP: 16 MB";
+        for (int i = 0; msg[i] != '\0'; i++) shell_output[i] = msg[i];
+    } else if (kstrcmp(input_buffer, "panic") == 0) {
+        serial_write("[SHELL] DISPARANDO EXCECAO DE DIVISAO POR ZERO PARA TESTAR KERNEL PANIC!\n");
+        int a = 10;
+        int b = 0;
+        int c = a / b; // FORÇA DIVISÃO POR ZERO!
+        (void)c;
+    } else if (input_buffer[0] != '\0') {
+        for (int i = 0; i < 64; i++) shell_output[i] = '\0';
+        const char* msg = "COMANDO DESCONHECIDO! DIGITE 'HELP'.";
+        for (int i = 0; msg[i] != '\0'; i++) shell_output[i] = msg[i];
+    }
+    input_index = 0;
+    input_buffer[0] = '\0';
+}
 
-    gfx_draw_rect(win_x + 8, win_y + 8, win_w, win_h, 0x11111B);
-    gfx_draw_rect(win_x, win_y, win_w, win_h, COLOR_GRAY);
-    gfx_draw_rect(win_x, win_y, win_w, 30, COLOR_LIGHT_GRAY);
-    gfx_draw_string("SISTEMA OPERACIONAL (GUI + TECLADO + MOUSE)", win_x + 15, win_y + 11, COLOR_WHITE);
+// LÓGICA DE INTERAÇÃO DO MOUSE (DRAG & DROP, CLIQUES)
+void handle_mouse_events(void) {
+    int click = mouse_left_clicked;
+    int just_pressed = (click && !prev_mouse_left);
+    prev_mouse_left = click;
 
-    gfx_draw_rect(win_x + win_w - 25, win_y + 7, 16, 16, COLOR_RED);
-    gfx_draw_rect(win_x + win_w - 45, win_y + 7, 16, 16, COLOR_BLUE);
-
-    gfx_draw_string("DIGITE NO SEU TECLADO:", win_x + 30, win_y + 45, COLOR_GREEN);
-    gfx_draw_rect(win_x + 30, win_y + 68, 580, 35, COLOR_NAVY);
-    gfx_draw_string(input_buffer, win_x + 40, win_y + 80, COLOR_WHITE);
-
-    gfx_draw_string("COORDENADAS DO MOUSE EM TEMPO REAL:", win_x + 30, win_y + 120, COLOR_BLUE);
-    gfx_draw_string("X: ", win_x + 30, win_y + 145, COLOR_WHITE);
-    gfx_draw_number(mouse_x, win_x + 50, win_y + 145, COLOR_GREEN);
-
-    gfx_draw_string("Y: ", win_x + 120, win_y + 145, COLOR_WHITE);
-    gfx_draw_number(mouse_y, win_x + 140, win_y + 145, COLOR_GREEN);
-
-    if (mouse_left_clicked) {
-        gfx_draw_string("CLIQUE ESQUERDO ATIVO!", win_x + 240, win_y + 145, COLOR_RED);
+    // 1. Clique no Botão START (x: 10..90, y: 565..595)
+    if (just_pressed && mouse_x >= 10 && mouse_x <= 90 && mouse_y >= 565 && mouse_y <= 595) {
+        start_menu_open = !start_menu_open;
+        serial_write("[GUI] Menu Start alternado\n");
+        return;
     }
 
-    gfx_draw_rect(win_x + 30, win_y + 185, win_w - 60, 260, COLOR_NAVY);
-    gfx_draw_string("STATUS DA MEMORIA HEAP (RAM):", win_x + 50, win_y + 205, COLOR_WHITE);
+    // 2. Clique nas opções do Menu Start Pop-up
+    if (start_menu_open && just_pressed && mouse_x >= 10 && mouse_x <= 200 && mouse_y >= 430 && mouse_y <= 560) {
+        if (mouse_y >= 435 && mouse_y < 470) { active_app = 0; win_open = 1; serial_write("[APP] Abriu Shell\n"); }
+        else if (mouse_y >= 470 && mouse_y < 510) { active_app = 1; win_open = 1; serial_write("[APP] Abriu Memoria\n"); }
+        else if (mouse_y >= 510 && mouse_y <= 555) { active_app = 2; win_open = 1; serial_write("[APP] Abriu IDT\n"); }
+        start_menu_open = 0;
+        return;
+    }
 
-    gfx_draw_string("RAM ALOCADA ATIVA: ", win_x + 50, win_y + 245, COLOR_WHITE);
-    gfx_draw_number((int)memory_get_total_allocated(), win_x + 220, win_y + 245, COLOR_GREEN);
-    gfx_draw_string(" BYTES", win_x + 290, win_y + 245, COLOR_WHITE);
+    if (start_menu_open && just_pressed) {
+        start_menu_open = 0;
+    }
 
-    gfx_draw_string("RAM LIVRE DISPONIVEL: ", win_x + 50, win_y + 285, COLOR_WHITE);
-    gfx_draw_number((int)memory_get_total_free() / 1024, win_x + 250, win_y + 285, COLOR_GREEN);
-    gfx_draw_string(" KB", win_x + 330, win_y + 285, COLOR_WHITE);
+    if (!win_open) return;
 
-    gfx_draw_string("TOTAL BLOCOS HEAP: ", win_x + 50, win_y + 325, COLOR_WHITE);
-    gfx_draw_number((int)memory_get_block_count(), win_x + 220, win_y + 325, COLOR_WHITE);
+    // 3. Clique no Botão FECHAR [X] da Janela
+    if (just_pressed && mouse_x >= (win_x + win_w - 25) && mouse_x <= (win_x + win_w - 9) &&
+        mouse_y >= (win_y + 7) && mouse_y <= (win_y + 23)) {
+        win_open = 0;
+        is_dragging = 0;
+        serial_write("[GUI] Janela Fechada\n");
+        return;
+    }
 
-    gfx_draw_string("DOUBLE BUFFERING: ATIVO (ZERO FLICKERING!)", win_x + 50, win_y + 375, COLOR_GREEN);
+    // 4. Clique na Barra de Título para ARRASTAR A JANELA (Drag & Drop)
+    if (just_pressed && mouse_x >= win_x && mouse_x <= (win_x + win_w - 50) &&
+        mouse_y >= win_y && mouse_y <= (win_y + 30)) {
+        is_dragging = 1;
+        drag_off_x = mouse_x - win_x;
+        drag_off_y = mouse_y - win_y;
+        serial_write("[GUI] Iniciou arrasto de janela\n");
+    }
 
+    // Mover a janela enquanto segura o clique
+    if (click && is_dragging) {
+        win_x = mouse_x - drag_off_x;
+        win_y = mouse_y - drag_off_y;
+
+        if (win_x < 0) win_x = 0;
+        if (win_x + win_w > 800) win_x = 800 - win_w;
+        if (win_y < 0) win_y = 0;
+        if (win_y + win_h > 555) win_y = 555 - win_h;
+    }
+
+    if (!click) {
+        is_dragging = 0;
+    }
+}
+
+// RENDERIZAÇÃO DA INTERFACE GRÁFICA
+void render_gui(void) {
+    // 1. Fundo do Desktop
+    gfx_clear(COLOR_DARK_SLATE);
+
+    // 2. Barra de Tarefas
+    gfx_draw_rect(0, 560, 800, 40, COLOR_NAVY);
+    gfx_draw_rect(10, 565, 80, 30, start_menu_open ? COLOR_GREEN : COLOR_BLUE);
+    gfx_draw_string("START", 30, 576, COLOR_NAVY);
+    gfx_draw_string("BARE-METAL OS v0.5", 590, 576, COLOR_WHITE);
+
+    // 3. Janela Ativa (se aberta)
+    if (win_open) {
+        gfx_draw_rect(win_x + 8, win_y + 8, win_w, win_h, 0x11111B); // Sombra
+        gfx_draw_rect(win_x, win_y, win_w, win_h, COLOR_GRAY);        // Corpo
+        gfx_draw_rect(win_x, win_y, win_w, 30, COLOR_LIGHT_GRAY);    // Barra Título
+
+        if (active_app == 0) gfx_draw_string("JANELA: TERMINAL SHELL (CLI)", win_x + 15, win_y + 11, COLOR_WHITE);
+        else if (active_app == 1) gfx_draw_string("JANELA: GERENCIADOR DE MEMORIA RAM", win_x + 15, win_y + 11, COLOR_WHITE);
+        else if (active_app == 2) gfx_draw_string("JANELA: DIAGNOSTICO IDT & CPU", win_x + 15, win_y + 11, COLOR_WHITE);
+
+        // Botões Fechar / Minimizar
+        gfx_draw_rect(win_x + win_w - 25, win_y + 7, 16, 16, COLOR_RED);
+        gfx_draw_rect(win_x + win_w - 45, win_y + 7, 16, 16, COLOR_BLUE);
+
+        // --- CONTEÚDO DO APP 0: SHELL (CLI) ---
+        if (active_app == 0) {
+            gfx_draw_string("TERMINAL SHELL INTERATIVO:", win_x + 30, win_y + 50, COLOR_GREEN);
+            gfx_draw_string("DIGITE UM COMANDO (HELP, CLEAR, RAM, PANIC):", win_x + 30, win_y + 80, COLOR_WHITE);
+
+            gfx_draw_rect(win_x + 30, win_y + 105, win_w - 60, 35, COLOR_NAVY);
+            gfx_draw_string("myos> ", win_x + 40, win_y + 118, COLOR_GREEN);
+            gfx_draw_string(input_buffer, win_x + 90, win_y + 118, COLOR_WHITE);
+
+            gfx_draw_rect(win_x + 30, win_y + 160, win_w - 60, 240, COLOR_NAVY);
+            gfx_draw_string("SAIDA DO CONSOLE:", win_x + 50, win_y + 180, COLOR_BLUE);
+            gfx_draw_string(shell_output, win_x + 50, win_y + 220, COLOR_WHITE);
+        }
+        // --- CONTEÚDO DO APP 1: MEMÓRIA ---
+        else if (active_app == 1) {
+            gfx_draw_string("GERENCIADOR DE MEMORIA HEAP:", win_x + 30, win_y + 50, COLOR_GREEN);
+
+            gfx_draw_rect(win_x + 30, win_y + 90, win_w - 60, 300, COLOR_NAVY);
+            gfx_draw_string("RAM ALOCADA ATIVA: ", win_x + 50, win_y + 120, COLOR_WHITE);
+            gfx_draw_number((int)memory_get_total_allocated(), win_x + 220, win_y + 120, COLOR_GREEN);
+            gfx_draw_string(" BYTES", win_x + 290, win_y + 120, COLOR_WHITE);
+
+            gfx_draw_string("RAM LIVRE DISPONIVEL: ", win_x + 50, win_y + 160, COLOR_WHITE);
+            gfx_draw_number((int)memory_get_total_free() / 1024, win_x + 250, win_y + 160, COLOR_GREEN);
+            gfx_draw_string(" KB", win_x + 330, win_y + 160, COLOR_WHITE);
+
+            gfx_draw_string("TOTAL BLOCOS HEAP: ", win_x + 50, win_y + 200, COLOR_WHITE);
+            gfx_draw_number((int)memory_get_block_count(), win_x + 220, win_y + 200, COLOR_WHITE);
+        }
+        // --- CONTEÚDO DO APP 2: IDT & HARDWARE ---
+        else if (active_app == 2) {
+            gfx_draw_string("DIAGNOSTICO DE INTERRUPCOES & CPU:", win_x + 30, win_y + 50, COLOR_GREEN);
+
+            gfx_draw_rect(win_x + 30, win_y + 90, win_w - 60, 300, COLOR_NAVY);
+            gfx_draw_string("STATUS DA TABELA IDT: ATIVA (256 GATES)", win_x + 50, win_y + 120, COLOR_WHITE);
+            gfx_draw_string("DRIVER TECLADO PS/2: IRQ1 (INT 33) OK", win_x + 50, win_y + 160, COLOR_WHITE);
+            gfx_draw_string("DRIVER MOUSE PS/2: IRQ12 (INT 44) OK", win_x + 50, win_y + 200, COLOR_WHITE);
+            gfx_draw_string("HANDLER EXCECAO 00 (PANIC): CONFIGURADO", win_x + 50, win_y + 240, COLOR_GREEN);
+        }
+    }
+
+    // 4. MENU START POP-UP (Se aberto)
+    if (start_menu_open) {
+        gfx_draw_rect(10, 430, 190, 130, COLOR_NAVY);
+        gfx_draw_rect(10, 430, 190, 25, COLOR_BLUE);
+        gfx_draw_string("MENU START", 20, 438, COLOR_WHITE);
+
+        gfx_draw_string("> 1. SHELL (CLI)", 20, 465, active_app == 0 ? COLOR_GREEN : COLOR_WHITE);
+        gfx_draw_string("> 2. MEMORIA (RAM)", 20, 500, active_app == 1 ? COLOR_GREEN : COLOR_WHITE);
+        gfx_draw_string("> 3. IDT / HARDWARE", 20, 535, active_app == 2 ? COLOR_GREEN : COLOR_WHITE);
+    }
+
+    // 5. PONTEIRO DO MOUSE
     gfx_draw_cursor(mouse_x, mouse_y);
 
-    // COPIA O QUADRO PRONTO DA RAM PARA A PLACA DE VÍDEO SEM PISCAR!
+    // Troca os buffers para a tela
     gfx_swap_buffers();
 }
 
@@ -67,26 +203,17 @@ void kernel_main(multiboot_info_t* mbi) {
     serial_init();
     serial_write("[LOG SERIAL] INICIALIZANDO KERNEL BARE-METAL v0.5\n");
 
-    // IMPORTANTE: memory_init é chamado ANTES para o kmalloc funcionar no gfx_init!
     memory_init(mbi);
-    serial_write("[LOG SERIAL] [OK] Gerenciador de Memoria Heap Avançado\n");
-
     gfx_init(mbi);
-    serial_write("[LOG SERIAL] [OK] Driver Grafico VBE com Double Buffering\n");
-
     idt_init();
-    serial_write("[LOG SERIAL] [OK] Interrupcoes Teclado e Mouse PS/2\n");
-
-    void* p1 = kmalloc(256);
-    void* p2 = kmalloc(512);
-    kfree(p1);
-    void* p3 = kmalloc(128);
-    (void)p2;
-    (void)p3;
 
     input_buffer[0] = '\0';
 
     while (1) {
+        // Trata interações de cliques e arrasto do mouse
+        handle_mouse_events();
+
+        // Trata teclado
         if (last_key_pressed != 0) {
             char c = last_key_pressed;
             last_key_pressed = 0;
@@ -94,8 +221,7 @@ void kernel_main(multiboot_info_t* mbi) {
             if (c == '\b') {
                 if (input_index > 0) input_buffer[--input_index] = '\0';
             } else if (c == '\n') {
-                input_index = 0;
-                input_buffer[0] = '\0';
+                if (active_app == 0) process_shell_command();
             } else if (input_index < 30) {
                 input_buffer[input_index++] = c;
                 input_buffer[input_index] = '\0';

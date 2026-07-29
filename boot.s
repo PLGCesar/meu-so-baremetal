@@ -35,6 +35,29 @@ load_idt:
     sti
     ret
 
+/* HANDLER DE EXCEÇÃO 00 (DIVISÃO POR ZERO) */
+.global isr0_stub
+.extern exception0_handler
+isr0_stub:
+    pusha
+    cld
+    push %ds
+    push %es
+    push %fs
+    push %gs
+    mov $0x18, %ax
+    mov %ax, %ds
+    mov %ax, %es
+    mov %ax, %fs
+    mov %ax, %gs
+    call exception0_handler
+    pop %gs
+    pop %fs
+    pop %es
+    pop %ds
+    popa
+    iret
+
 .global irq1_stub
 .extern keyboard_handler_main
 irq1_stub:
