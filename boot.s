@@ -1,8 +1,7 @@
-/* Multiboot 1 com solicitação de Modo Gráfico */
+/* Padrão Multiboot 1 */
 .set ALIGN,    1<<0
 .set MEMINFO,  1<<1
-.set GRAPHICS, 1<<2
-.set FLAGS,    ALIGN | MEMINFO | GRAPHICS
+.set FLAGS,    ALIGN | MEMINFO
 .set MAGIC,    0x1BADB002
 .set CHECKSUM, -(MAGIC + FLAGS)
 
@@ -11,11 +10,6 @@
 .long MAGIC
 .long FLAGS
 .long CHECKSUM
-/* Solicitação de Modo Gráfico 800x600x32 bpp ao Bootloader */
-.long 0   /* 0 = Linear Graphics Mode */
-.long 800 /* Largura */
-.long 600 /* Altura */
-.long 32  /* Profundidade de Cores (32-bit RGB) */
 
 .section .bss
 .align 16
@@ -28,7 +22,7 @@ stack_top:
 .type _start, @function
 _start:
 	mov $stack_top, %esp
-	push %ebx            # Passa o ponteiro da estrutura Multiboot para o C!
+	push %ebx            # Passa o ponteiro da estrutura Multiboot com o Framebuffer para o C!
 	call kernel_main
 	cli
 1:	hlt
