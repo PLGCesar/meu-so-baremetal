@@ -17,6 +17,31 @@ void timer_init(void) {
     serial_write("[TASK SCHEDULER] Timer PIT 10ms (100Hz) Inicializado!\n");
 }
 
+void task_init(void) {
+    num_tasks = 0;
+    current_task = 0;
+    system_ticks = 0;
+
+    // Registra o processo atual (kernel_main) como a Task 0 (PID 1)
+    task_t* t = &tasks[0];
+    t->pid = 1;
+    t->state = TASK_STATE_RUNNING;
+    t->priority = 1;
+    t->ticks_remaining = 3;
+    t->time_ticks = 0;
+
+    const char* name = "Kernel_Main_GUI";
+    int i = 0;
+    while (name[i] != '\0' && i < 31) {
+        t->name[i] = name[i];
+        i++;
+    }
+    t->name[i] = '\0';
+
+    num_tasks = 1;
+    timer_init();
+}
+
 int task_create(void (*entry)(void), const char* name, int priority) {
     if (num_tasks >= MAX_TASKS) return -1;
 
@@ -37,9 +62,9 @@ int task_create(void (*entry)(void), const char* name, int priority) {
 
     uint32_t* stk = (uint32_t*)&t->stack[1024];
 
-    *(--stk) = 0x0202;
-    *(--stk) = 0x10;
-    *(--stk) = (uint32_t)entry;
+    *(--stk) = 0x0202;          // EFLAGS (Interrupts Ativas)
+    *(--stk) = 0x10;            // CS Code Segment
+    *(--stk) = (uint32_t)entry; // EIP Entry Point
 
     *(--stk) = 0; // EAX
     *(--stk) = 0; // ECX
@@ -56,12 +81,12 @@ int task_create(void (*entry)(void), const char* name, int priority) {
     *(--stk) = 0x18; // GS
 
     t->esp = (uint32_t)stk;
-    serial_write("[TASK SCHEDULER] Processo criado no Escalonador!\n");
+    serial_write("[TASK SCHEDULER] Processo secundario criado com Sucesso!\n");
     return id;
 }
 
 uint32_t schedule(uint32_t current_esp) {
-    outb(0x20, 0x20);
+    outb(0x20, 0x20); // EOI Master PIC
     system_ticks++;
 
     if (num_tasks == 0) return current_esp;

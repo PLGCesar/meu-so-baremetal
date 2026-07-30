@@ -19,11 +19,12 @@ typedef struct task {
     uint32_t esp;
     uint32_t stack[1024];
     task_state_t state;
-    int priority;           // 1 = Alta, 2 = Media, 3 = Baixa
+    int priority;
     uint32_t time_ticks;
     uint32_t ticks_remaining;
 } task_t;
 
+void task_init(void); // Registra o kernel_main como Task 0
 void timer_init(void);
 int task_create(void (*entry)(void), const char* name, int priority);
 uint32_t schedule(uint32_t current_esp);

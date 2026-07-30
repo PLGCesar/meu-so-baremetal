@@ -9,16 +9,7 @@
 #include "../include/ui.h"
 #include "../include/task.h"
 
-// PROCESSOS SEPARADOS EXECUTANDO EM PARALELO VIA ESCALONADOR PREEMPTIVO
-void task_gui_loop(void) {
-    while (1) {
-        ui_handle_mouse();
-        ui_handle_keyboard();
-        ui_render();
-        asm volatile ("hlt");
-    }
-}
-
+// PROCESSO SECUNDÁRIO RODANDO EM PARALELO (SINTETIZADOR DE MÚSICA)
 void task_music_loop(void) {
     while (1) {
         music_update();
@@ -36,14 +27,20 @@ void kernel_main(multiboot_info_t* mbi) {
     vfs_init();
     ui_init();
 
-    // CRIA OS PROCESSOS SEPARADOS NO ESCALONADOR COM PRIORIDADES
-    task_create(task_gui_loop, "GUI_Render_Engine", 1);  // Prioridade 1 (Alta)
-    task_create(task_music_loop, "Chiptune_Synthesizer", 2); // Prioridade 2 (Media)
+    // 1. Inicializa o Escalonador registrando o kernel_main como Task 0 (PID 1)
+    task_init();
+
+    // 2. Cria a Task 1 (Sintetizador de Música em segundo plano)
+    task_create(task_music_loop, "Chiptune_Synthesizer", 2);
 
     sound_startup();
-    serial_write("[LOG SERIAL] Escalonador Preemptivo ativado com Sucesso!\n");
+    serial_write("[LOG SERIAL] Escalonador Preemptivo ativado! Renderizando GUI...\n");
 
+    // LOOP PRINCIPAL DA GUI (Task 0 - PID 1)
     while (1) {
+        ui_handle_mouse();
+        ui_handle_keyboard();
+        ui_render();
         asm volatile ("hlt");
     }
 }
