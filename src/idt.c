@@ -6,21 +6,12 @@
 static inline uint8_t inb(uint16_t port) { uint8_t ret; asm volatile ("inb %1, %0" : "=a"(ret) : "Nd"(port)); return ret; }
 static inline void outb(uint16_t port, uint8_t val) { asm volatile ("outb %0, %1" : : "a"(val), "Nd"(port)); }
 
-// ESTRUTURA IDT DE 64-BITS (MUITO MAIOR E COMPLEXA)
 struct idt_entry {
-    uint16_t base_low;
-    uint16_t sel;
-    uint8_t  ist;
-    uint8_t  flags;
-    uint16_t base_mid;
-    uint32_t base_high;
-    uint32_t reserved;
+    uint16_t base_low; uint16_t sel; uint8_t ist; uint8_t flags;
+    uint16_t base_mid; uint32_t base_high; uint32_t reserved;
 } __attribute__((packed));
 
-struct idt_ptr {
-    uint16_t limit;
-    uint64_t base;
-} __attribute__((packed));
+struct idt_ptr { uint16_t limit; uint64_t base; } __attribute__((packed));
 
 struct idt_entry idt[256];
 struct idt_ptr idtp;
@@ -42,15 +33,11 @@ const char scancode_ascii[128] = {
    '\\', 'z', 'x', 'c', 'v', 'b', 'n', 'm', ',', '.', '/',   0, '*',   0, ' '
 };
 
-// MAPEIA A FUNÇÃO DE C 64-BITS NA TABELA
 void idt_set_gate(uint8_t num, uint64_t base, uint16_t sel, uint8_t flags) {
     idt[num].base_low = base & 0xFFFF;
     idt[num].base_mid = (base >> 16) & 0xFFFF;
     idt[num].base_high = (base >> 32) & 0xFFFFFFFF;
-    idt[num].sel = sel;
-    idt[num].ist = 0;
-    idt[num].flags = flags;
-    idt[num].reserved = 0;
+    idt[num].sel = sel; idt[num].ist = 0; idt[num].flags = flags; idt[num].reserved = 0;
 }
 
 void exception0_handler(void) {
@@ -68,9 +55,33 @@ void pic_remap(void) {
     outb(0x21, 0xF8); outb(0xA1, 0xEF);
 }
 
+// RESTAURANDO A LÓGICA DE ESPERA DO CHIP DO MOUSE
+void mouse_wait(uint8_t type) {
+    uint32_t timeout = 100000;
+    if (type == 0) {
+        while (timeout--) { if ((inb(0x64) & 1) == 1) return; }
+    } else {
+        while (timeout--) { if ((inb(0x64) & 2) == 0) return; }
+    }
+}
+
+void mouse_write(uint8_t data) {
+    mouse_wait(1); outb(0x64, 0xD4);
+    mouse_wait(1); outb(0x60, data);
+}
+
+uint8_t mouse_read(void) {
+    mouse_wait(0); return inb(0x60);
+}
+
 void mouse_init(void) {
-    outb(0x64, 0xA8); outb(0x64, 0x20); outb(0x64, 0x60);
-    outb(0x60, (inb(0x60) | 2)); outb(0x60, 0xF4);
+    uint8_t status;
+    mouse_wait(1); outb(0x64, 0xA8);
+    mouse_wait(1); outb(0x64, 0x20);
+    mouse_wait(0); status = (inb(0x60) | 2);
+    mouse_wait(1); outb(0x64, 0x60);
+    mouse_wait(1); outb(0x60, status);
+    mouse_write(0xF4); mouse_read();
 }
 
 void idt_init(void) {
