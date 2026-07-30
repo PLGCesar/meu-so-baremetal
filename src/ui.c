@@ -14,7 +14,7 @@
 
 typedef struct {
     int id;
-    int app_type; // 0 = Shell, 1 = Memoria, 2 = IDT, 3 = Galeria, 4 = Musica, 5 = Tarefas
+    int app_type;
     int x, y, w, h;
     int is_open;
     int z_index;
@@ -29,7 +29,6 @@ static int current_wallpaper = -1;
 static int start_menu_open = 0;
 
 static int gallery_photo = 0;
-static char gallery_status_msg[64] = "CLIQUE NOS BOTOES PARA USAR COMO WALLPAPER OU SALVAR!";
 
 static char input_buffer[32];
 static int input_index = 0;
@@ -70,7 +69,7 @@ void ui_init(void) {
     windows[2] = (window_t){2, 2, 100, 80, 580, 480, 0, 3}; // IDT
     windows[3] = (window_t){3, 3, 120, 30, 580, 500, 0, 4}; // Galeria
     windows[4] = (window_t){4, 4, 220, 70, 520, 440, 0, 5}; // Musica
-    windows[5] = (window_t){5, 5, 160, 40, 600, 460, 1, 6}; // Gerenciador de Tarefas
+    windows[5] = (window_t){5, 5, 160, 40, 600, 460, 1, 6}; // Tarefas
 
     top_z_index = 6;
 }
@@ -155,7 +154,7 @@ void ui_handle_mouse(void) {
         else if (mouse_y >= 210 && mouse_y <= 280) bring_to_front(2);
         else if (mouse_y >= 300 && mouse_y <= 370) bring_to_front(3);
         else if (mouse_y >= 390 && mouse_y <= 460) bring_to_front(4);
-        else if (mouse_y >= 480 && mouse_y <= 550) bring_to_front(5); // Tarefas
+        else if (mouse_y >= 480 && mouse_y <= 550) bring_to_front(5);
     }
 
     if (just_pressed && mouse_x >= 10 && mouse_x <= 90 && mouse_y >= 565 && mouse_y <= 595) {
@@ -169,7 +168,7 @@ void ui_handle_mouse(void) {
         else if (mouse_y >= 400 && mouse_y < 435) bring_to_front(2);
         else if (mouse_y >= 435 && mouse_y < 470) bring_to_front(3);
         else if (mouse_y >= 470 && mouse_y < 505) bring_to_front(4);
-        else if (mouse_y >= 505 && mouse_y <= 550) bring_to_front(5); // Tarefas
+        else if (mouse_y >= 505 && mouse_y <= 550) bring_to_front(5);
         start_menu_open = 0;
         return;
     }
@@ -245,7 +244,7 @@ void draw_single_window(window_t* w) {
     else if (w->app_type == 1) gfx_draw_string("JANELA: GERENCIADOR DE MEMORIA RAM", win_x + 15, win_y + 11, COLOR_WHITE);
     else if (w->app_type == 2) gfx_draw_string("JANELA: DIAGNOSTICO IDT & CPU", win_x + 15, win_y + 11, COLOR_WHITE);
     else if (w->app_type == 3) gfx_draw_string("JANELA: GALERIA DE PAISAGENS & .BMP", win_x + 15, win_y + 11, COLOR_WHITE);
-    else if (w->app_type == 4) gfx_draw_string("JANELA: PLAYER DE MUSICA CHIPTUNE", win_x + 15, win_y + 11, COLOR_WHITE);
+    else if (w->app_type == 4) gfx_draw_string("JANELA: PLAYER DE MUSICA CHIPTUNE 8-BIT", win_x + 15, win_y + 11, COLOR_WHITE);
     else if (w->app_type == 5) gfx_draw_string("JANELA: GERENCIADOR DE TAREFAS DA CPU", win_x + 15, win_y + 11, COLOR_WHITE);
 
     gfx_draw_rect(win_x + win_w - 25, win_y + 7, 16, 16, COLOR_RED);
@@ -303,9 +302,7 @@ void draw_single_window(window_t* w) {
         gfx_draw_rect(win_x + 220, win_y + 160, 180, 40, COLOR_BLUE);
         gfx_draw_string("MUDAR FAIXA", win_x + 250, win_y + 175, COLOR_WHITE);
     } else if (w->app_type == 5) {
-        // APP GERENCIADOR DE TAREFAS DA CPU
         gfx_draw_string("GERENCIADOR DE TAREFAS (ROUND-ROBIN MULTITASKING):", win_x + 30, win_y + 45, COLOR_GREEN);
-
         gfx_draw_rect(win_x + 30, win_y + 70, win_w - 60, 350, COLOR_NAVY);
         gfx_draw_string("PID   NOME              PRIORIDADE   ESTADO      TICKS", win_x + 40, win_y + 85, COLOR_BLUE);
 
@@ -327,7 +324,7 @@ void draw_single_window(window_t* w) {
             gfx_draw_number(t->time_ticks, win_x + 480, row_y, COLOR_WHITE);
         }
 
-        gfx_draw_string("CPU CLOCK TIKCS (10MS): ", win_x + 40, win_y + 380, COLOR_WHITE);
+        gfx_draw_string("CPU CLOCK TICKS (10MS): ", win_x + 40, win_y + 380, COLOR_WHITE);
         gfx_draw_number(get_system_ticks(), win_x + 260, win_y + 380, COLOR_GREEN);
     }
 }

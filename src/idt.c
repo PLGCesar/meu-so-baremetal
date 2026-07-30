@@ -43,6 +43,13 @@ char last_key_pressed = 0;
 static uint8_t mouse_cycle = 0;
 static int8_t mouse_byte[3];
 
+const char scancode_ascii[128] = {
+    0,  27, '1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '-', '=', '\b',
+  '\t', 'q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p', '[', ']', '\n',
+    0,  'a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l', ';', '\'', '`',   0,
+   '\\', 'z', 'x', 'c', 'v', 'b', 'n', 'm', ',', '.', '/',   0, '*',   0, ' '
+};
+
 void idt_set_gate(uint8_t num, uint32_t base, uint16_t sel, uint8_t flags) {
     idt[num].base_low = base & 0xFFFF;
     idt[num].base_high = (base >> 16) & 0xFFFF;
@@ -69,9 +76,8 @@ void pic_remap(void) {
     outb(0x21, 0x04); outb(0xA1, 0x02);
     outb(0x21, 0x01); outb(0xA1, 0x01);
 
-    // MÁSCARA: Ativa IRQ0 (Timer Escalonador), IRQ1 (Teclado) e IRQ12 (Mouse)
-    outb(0x21, 0xF8); // 0xF8 = Unmask IRQ0, IRQ1, IRQ2
-    outb(0xA1, 0xEF); // Unmask IRQ12
+    outb(0x21, 0xF8);
+    outb(0xA1, 0xEF);
 }
 
 void mouse_wait(uint8_t type) {
@@ -110,10 +116,10 @@ void idt_init(void) {
 
     pic_remap();
 
-    idt_set_gate(0,  (uint32_t)isr0_stub,  0x10, 0x8E); // Exception 0: Divisao por Zero
-    idt_set_gate(32, (uint32_t)irq0_stub,  0x10, 0x8E); // IRQ0: Timer Escalonador 10ms
-    idt_set_gate(33, (uint32_t)irq1_stub,  0x10, 0x8E); // IRQ1: Teclado
-    idt_set_gate(44, (uint32_t)irq12_stub, 0x10, 0x8E); // IRQ12: Mouse
+    idt_set_gate(0,  (uint32_t)isr0_stub,  0x10, 0x8E);
+    idt_set_gate(32, (uint32_t)irq0_stub,  0x10, 0x8E);
+    idt_set_gate(33, (uint32_t)irq1_stub,  0x10, 0x8E);
+    idt_set_gate(44, (uint32_t)irq12_stub, 0x10, 0x8E);
 
     load_idt(&idtp);
     timer_init();
@@ -125,7 +131,6 @@ void keyboard_handler_main(void) {
     outb(0x20, 0x20);
 
     if (!(scancode & 0x80)) {
-        extern const char scancode_ascii[128];
         char c = scancode_ascii[scancode];
         if (c != 0) last_key_pressed = c;
     }

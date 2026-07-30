@@ -11,7 +11,6 @@ static inline void outb(uint16_t port, uint8_t val) {
 }
 
 void timer_init(void) {
-    // PIT Channel 0 - 100 Hz (10ms por tick)
     outb(0x43, 0x36);
     outb(0x40, (uint8_t)(11931 & 0xFF));
     outb(0x40, (uint8_t)((11931 >> 8) & 0xFF));
@@ -38,9 +37,9 @@ int task_create(void (*entry)(void), const char* name, int priority) {
 
     uint32_t* stk = (uint32_t*)&t->stack[1024];
 
-    *(--stk) = 0x0202;          // EFLAGS (Interrupts Ativas)
-    *(--stk) = 0x10;            // CS Code Segment
-    *(--stk) = (uint32_t)entry; // EIP Entry Point
+    *(--stk) = 0x0202;
+    *(--stk) = 0x10;
+    *(--stk) = (uint32_t)entry;
 
     *(--stk) = 0; // EAX
     *(--stk) = 0; // ECX
@@ -62,7 +61,7 @@ int task_create(void (*entry)(void), const char* name, int priority) {
 }
 
 uint32_t schedule(uint32_t current_esp) {
-    outb(0x20, 0x20); // EOI Master PIC
+    outb(0x20, 0x20);
     system_ticks++;
 
     if (num_tasks == 0) return current_esp;

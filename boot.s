@@ -34,7 +34,6 @@ load_idt:
     sti
     ret
 
-/* ESCALONADOR PREEMPTIVO DE TAREFAS (IRQ0 TIMER 10MS) */
 .global irq0_stub
 .extern schedule
 irq0_stub:
