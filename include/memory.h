@@ -1,6 +1,5 @@
 #ifndef MEMORY_H
 #define MEMORY_H
-
 #include <stddef.h>
 #include <stdint.h>
 #include "multiboot.h"
@@ -20,5 +19,4 @@ void kfree(void* ptr);
 size_t memory_get_total_allocated(void);
 size_t memory_get_total_free(void);
 size_t memory_get_block_count(void);
-
 #endif

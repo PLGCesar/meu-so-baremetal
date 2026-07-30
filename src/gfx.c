@@ -69,6 +69,9 @@ static const uint8_t font8x8_basic[128][8] = {
     ['.'] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x18, 0x18, 0x00},
     ['('] = {0x0C, 0x18, 0x30, 0x30, 0x30, 0x18, 0x0C, 0x00},
     [')'] = {0x30, 0x18, 0x0C, 0x0C, 0x0C, 0x18, 0x30, 0x00},
+    ['/'] = {0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80, 0x00},
+    ['>'] = {0x60, 0x30, 0x18, 0x0C, 0x18, 0x30, 0x60, 0x00},
+    ['<'] = {0x06, 0x0C, 0x18, 0x30, 0x18, 0x0C, 0x06, 0x00},
     [' '] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}
 };
 
@@ -194,11 +197,6 @@ void gfx_draw_cursor(int x, int y) {
     }
 }
 
-// =======================================================
-// ALGORITMOS DE PAISAGENS MELHORADOS (IMPROVED REALISM)
-// =======================================================
-
-// 1. PÔR DO SOL COM HALO DE LUZ E MULTICAMADAS DE MONTANHAS
 void gfx_draw_landscape_sunset(int x, int y, int w, int h) {
     int horizon = y + (h * 6) / 10;
     int sun_cx = x + w / 2;
@@ -211,7 +209,6 @@ void gfx_draw_landscape_sunset(int x, int y, int w, int h) {
             uint32_t color = 0;
 
             if (py < horizon) {
-                // Degradê do Céu Atmosférico (Violeta -> Vermelho Laranja -> Amarelo Horizonte)
                 int t = (rel_y * 255) / (horizon - y);
                 if (t > 255) t = 255;
                 uint32_t r, g, b;
@@ -228,39 +225,35 @@ void gfx_draw_landscape_sunset(int x, int y, int w, int h) {
                 }
                 color = (r << 16) | (g << 8) | b;
 
-                // Sol Iluminado com Halo Suave
                 int dx = px - sun_cx;
                 int dy = py - sun_cy;
                 int dist2 = dx*dx + dy*dy;
                 if (dist2 < 1200) {
-                    color = 0xFFF1E6; // Núcleo do Sol
+                    color = 0xFFF1E6;
                 } else if (dist2 < 2800) {
-                    color = 0xFFD166; // Brilho de Halo
+                    color = 0xFFD166;
                 }
 
-                // Montanhas Distantes (Roxo)
                 int m2 = ((rel_x * 9) % 40) + ((rel_x * 5) % 25);
                 if (py > horizon - 35 - m2) {
                     color = 0x3A0CA3;
                 }
 
-                // Montanhas Próximas (Escuras)
                 int m1 = ((rel_x * 13) % 30) + ((rel_x * 19) % 20);
                 if (py > horizon - 15 - m1) {
                     color = 0x10002B;
                 }
             } else {
-                // Oceano com Trilha de Luz Refletida
                 int dx = px - sun_cx;
                 if (dx < 0) dx = -dx;
                 int ripple = (rel_x * 23 + rel_y * 11) % 17;
 
                 if (dx < 80 && ripple < 9) {
-                    color = 0xFFD166; // Trilha de luz brilhante
+                    color = 0xFFD166;
                 } else if (dx < 160 && ripple < 5) {
-                    color = 0xF72585; // Brilho rosa nas ondas
+                    color = 0xF72585;
                 } else {
-                    color = 0x050517; // Mar profundo
+                    color = 0x050517;
                 }
             }
             gfx_put_pixel(px, py, color);
@@ -268,7 +261,6 @@ void gfx_draw_landscape_sunset(int x, int y, int w, int h) {
     }
 }
 
-// 2. COSMOS, NEBULOSA E PLANETA GASOSO ILUMINADO EM 3D
 void gfx_draw_landscape_cosmos(int x, int y, int w, int h) {
     int cx = x + w / 3;
     int cy = y + h / 2;
@@ -279,13 +271,11 @@ void gfx_draw_landscape_cosmos(int x, int y, int w, int h) {
         for (int px = x; px < x + w; px++) {
             uint32_t color = 0x03030D;
 
-            // Estrelas
             int hash = (px * 73 + py * 137) % 197;
             if (hash == 7) color = 0xFFFFFF;
             else if (hash == 19) color = 0x4CC9F0;
             else if (hash == 42) color = 0xF72585;
 
-            // Nebulosa
             int dx = px - cx;
             int dy = py - cy;
             int dist2 = dx*dx + dy*dy;
@@ -294,7 +284,6 @@ void gfx_draw_landscape_cosmos(int x, int y, int w, int h) {
                 color += ((intensity) << 16) | (intensity / 4 << 8) | (intensity);
             }
 
-            // Planeta Gasoso com Sombreamento 3D
             int pdx = px - p_cx;
             int pdy = py - p_cy;
             int pdist2 = pdx*pdx + pdy*pdy;
@@ -307,7 +296,6 @@ void gfx_draw_landscape_cosmos(int x, int y, int w, int h) {
                 color = (r << 16) | (g << 8) | b;
             }
 
-            // Anéis Inclinados
             int ring_eq = pdx*2 + pdy*6;
             if (ring_eq > -60 && ring_eq < 60 && pdist2 < 4500 && pdist2 > 1800) {
                 color = 0x7209B7;
@@ -318,7 +306,6 @@ void gfx_draw_landscape_cosmos(int x, int y, int w, int h) {
     }
 }
 
-// 3. CYBERPUNK SYNTHWAVE COM GRADE 3D E SOL EM FAIXAS
 void gfx_draw_landscape_synthwave(int x, int y, int w, int h) {
     int horizon = y + (h * 55) / 100;
     int sun_cx = x + w / 2;
@@ -330,14 +317,12 @@ void gfx_draw_landscape_synthwave(int x, int y, int w, int h) {
             uint32_t color = 0;
 
             if (py < horizon) {
-                // Céu Neon
                 int t = (rel_y * 255) / (horizon - y);
                 uint32_t r = 0x10 + ((0xFF - 0x10) * t) / 255;
                 uint32_t g = 0x00;
                 uint32_t b = 0x28 + ((0x70 - 0x28) * t) / 255;
                 color = (r << 16) | (g << 8) | b;
 
-                // Sol Gigante
                 int dx = px - sun_cx;
                 int dy = py - sun_cy;
                 if (dx*dx + dy*dy < 2500) {
@@ -347,20 +332,19 @@ void gfx_draw_landscape_synthwave(int x, int y, int w, int h) {
                     }
                 }
             } else {
-                // Grade Synthwave 3D
                 color = 0x050010;
                 int ground_y = py - horizon;
 
                 if (ground_y == 3 || ground_y == 10 || ground_y == 22 || ground_y == 40 ||
                     ground_y == 65 || ground_y == 100 || ground_y == 145 || ground_y == 200) {
-                    color = 0xF72585; // Rosa Magenta Neon
+                    color = 0xF72585;
                 }
 
                 int dx = px - sun_cx;
                 if (ground_y > 0) {
                     int perspective = (dx * 120) / ground_y;
                     if (perspective % 35 == 0) {
-                        color = 0x4CC9F0; // Ciano Neon
+                        color = 0x4CC9F0;
                     }
                 }
             }
