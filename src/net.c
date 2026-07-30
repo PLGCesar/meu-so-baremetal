@@ -5,7 +5,7 @@
 
 static uint16_t io_base = 0;
 static uint8_t mac_addr[6];
-static uint32_t my_ip = 0x3201A8C0; // IP: 192.168.1.50 (Little Endian)
+static uint32_t my_ip = 0x0F02000A; // IP OFICIAL DO QEMU SLIRP NAT: 10.0.2.15
 static uint8_t* rx_buffer = NULL;
 static uint32_t rx_offset = 0;
 static uint32_t rx_count = 0;
@@ -24,7 +24,6 @@ static uint32_t pci_read_config(uint8_t bus, uint8_t slot, uint8_t func, uint8_t
     return inl(0x0CFC);
 }
 
-// TRANSMITE UM PACOTE ETHERNET CRU
 void net_send_packet(const uint8_t* packet, uint32_t len) {
     if (!io_base) return;
 
@@ -59,7 +58,6 @@ uint16_t ip_checksum(void* vdata, size_t length) {
 }
 
 void net_init(void) {
-    // 1. Escaneia o Barramento PCI procurando a Placa Realtek RTL8139 (0x10EC:0x8139)
     for (uint8_t slot = 0; slot < 32; slot++) {
         uint32_t id = pci_read_config(0, slot, 0, 0);
         if ((id & 0xFFFF) == 0x10EC && ((id >> 16) & 0xFFFF) == 0x8139) {
@@ -71,47 +69,40 @@ void net_init(void) {
     }
 
     if (!io_base) {
-        serial_write("[NET] Placa RTL8139 nao encontrada (Usando Emulacao Virtual)\n");
         io_base = 0xC000;
     }
 
-    // 2. Liga a placa de rede RTL8139
-    outb(io_base + 0x52, 0x00); // Ligar energia
-    outb(io_base + 0x37, 0x10); // Reset de software
+    outb(io_base + 0x52, 0x00);
+    outb(io_base + 0x37, 0x10);
     while ((inb(io_base + 0x37) & 0x10) != 0);
 
-    // 3. Lê o Endereço MAC Físico gravado no chip da placa
     for (int i = 0; i < 6; i++) {
         mac_addr[i] = inb(io_base + i);
     }
 
-    // 4. Configura o Buffer RX de Recepção na RAM
     rx_buffer = kmalloc(8192 + 16 + 1500);
     outl(io_base + 0x30, (uint32_t)(uintptr_t)rx_buffer);
 
-    outw(io_base + 0x3C, 0x0005); // Habilita Interrupção RX/TX OK
-    outl(io_base + 0x44, 0x0F);   // AceitaBroadcast, Multicast e Pacotes Diretos
-    outb(io_base + 0x37, 0x0C);   // Ativa Transmissor (TX) e Receptor (RX)
+    outw(io_base + 0x3C, 0x0005);
+    outl(io_base + 0x44, 0x0F);
+    outb(io_base + 0x37, 0x0C);
 
-    serial_write("[NET] Placa de Rede RTL8139 Inicializada com IP 192.168.1.50!\n");
+    serial_write("[NET] Placa RTL8139 Inicializada com IP 10.0.2.15!\n");
 }
 
-// PROCESSA E RESPONDE A PACOTES PING (ICMP) E ARP AUTOMATICAMENTE
 void net_poll(void) {
     if (!io_base || !rx_buffer) return;
 
-    if ((inb(io_base + 0x37) & 0x01) == 0) { // Checa se chegou pacote no buffer RX
+    if ((inb(io_base + 0x37) & 0x01) == 0) {
         uint8_t* pkt = rx_buffer + rx_offset;
-        ethernet_header_t* eth = (ethernet_header_t*)(pkt + 4); // Pula cabeçalho RTL8139
+        ethernet_header_t* eth = (ethernet_header_t*)(pkt + 4);
 
         rx_count++;
         uint16_t eth_type = __builtin_bswap16(eth->type);
 
-        // 1. TRATA REQUISIÇÃO ARP (Address Resolution Protocol)
-        if (eth_type == 0x0806) {
+        if (eth_type == 0x0806) { // ARP
             arp_packet_t* arp = (arp_packet_t*)(pkt + 4 + sizeof(ethernet_header_t));
             if (__builtin_bswap16(arp->opcode) == 1 && arp->dest_ip == my_ip) {
-                // Monta Resposta ARP Reply
                 uint8_t reply[64];
                 ethernet_header_t* r_eth = (ethernet_header_t*)reply;
                 arp_packet_t* r_arp = (arp_packet_t*)(reply + sizeof(ethernet_header_t));
@@ -123,7 +114,7 @@ void net_poll(void) {
                 r_arp->hw_type = __builtin_bswap16(1);
                 r_arp->proto_type = __builtin_bswap16(0x0800);
                 r_arp->hw_len = 6; r_arp->proto_len = 4;
-                r_arp->opcode = __builtin_bswap16(2); // Reply
+                r_arp->opcode = __builtin_bswap16(2);
                 kmemcpy(r_arp->src_mac, mac_addr, 6);
                 r_arp->src_ip = my_ip;
                 kmemcpy(r_arp->dest_mac, arp->src_mac, 6);
@@ -132,14 +123,12 @@ void net_poll(void) {
                 net_send_packet(reply, sizeof(ethernet_header_t) + sizeof(arp_packet_t));
                 serial_write("[NET] Resposta ARP Reply Enviada!\n");
             }
-        }
-        // 2. TRATA PACOTE PING (ICMP Echo Request)
-        else if (eth_type == 0x0800) {
+        } else if (eth_type == 0x0800) { // IPv4 / ICMP PING
             ipv4_header_t* ip = (ipv4_header_t*)(pkt + 4 + sizeof(ethernet_header_t));
-            if (ip->protocol == 1 && ip->dest_ip == my_ip) { // ICMP
+            if (ip->protocol == 1 && ip->dest_ip == my_ip) {
                 icmp_header_t* icmp = (icmp_header_t*)(pkt + 4 + sizeof(ethernet_header_t) + sizeof(ipv4_header_t));
-                if (icmp->type == 8) { // Echo Request (PING)
-                    serial_write("[NET] PING RECEBIDO! ENVIANDO PING ECHO REPLY...\n");
+                if (icmp->type == 8) {
+                    serial_write("[NET] PING RECEBIDO! ENVIANDO ECHO REPLY...\n");
 
                     uint8_t reply[128];
                     kmemcpy(reply, pkt + 4, 98);
@@ -156,7 +145,7 @@ void net_poll(void) {
                     r_ip->checksum = 0;
                     r_ip->checksum = ip_checksum(r_ip, sizeof(ipv4_header_t));
 
-                    r_icmp->type = 0; // Echo Reply
+                    r_icmp->type = 0;
                     r_icmp->checksum = 0;
                     r_icmp->checksum = ip_checksum(r_icmp, 64);
 
