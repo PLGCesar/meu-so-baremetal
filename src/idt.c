@@ -103,8 +103,10 @@ void mouse_handler_main(void) {
         case 2: mouse_byte[2] = data; mouse_cycle = 0;
             mouse_left_clicked = (mouse_byte[0] & 0x01);
             mouse_x += mouse_byte[1]; mouse_y -= mouse_byte[2];
-            if (mouse_x < 0) mouse_x = 0; if (mouse_x >= 800) mouse_x = 799;
-            if (mouse_y < 0) mouse_y = 0; if (mouse_y >= 600) mouse_y = 599;
+            if (mouse_x < 0) { mouse_x = 0; }
+            if (mouse_x >= 800) { mouse_x = 799; }
+            if (mouse_y < 0) { mouse_y = 0; }
+            if (mouse_y >= 600) { mouse_y = 599; }
             break;
     }
     outb(0xA0, 0x20); outb(0x20, 0x20);

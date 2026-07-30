@@ -14,7 +14,7 @@
 typedef struct { int id; int app; int x, y, w, h; int is_open; int z; } window_t;
 static window_t windows[MAX_WINDOWS];
 static int top_z = 0, drag_id = -1, off_x = 0, off_y = 0;
-static int wallpaper = -1, start_open = 0, prev_mouse = 0;
+static int start_open = 0, prev_mouse = 0;
 
 static char input_buf[32]; static int input_idx = 0;
 static char shell_out[128] = "VFS PRONTO! DIGITE LS";
