@@ -1,36 +1,27 @@
 #ifndef TASK_H
 #define TASK_H
-
 #include <stdint.h>
 #include <stddef.h>
 
 #define MAX_TASKS 8
-
-typedef enum {
-    TASK_STATE_READY,
-    TASK_STATE_RUNNING,
-    TASK_STATE_SLEEPING,
-    TASK_STATE_DEAD
-} task_state_t;
+typedef enum { TASK_STATE_READY, TASK_STATE_RUNNING, TASK_STATE_SLEEPING, TASK_STATE_DEAD } task_state_t;
 
 typedef struct task {
     int pid;
     char name[32];
-    uint32_t esp;
-    uint32_t stack[1024];
+    uint64_t rsp;
+    uint64_t stack[1024]; // 8KB Stack 64-bits
     task_state_t state;
     int priority;
     uint32_t time_ticks;
     uint32_t ticks_remaining;
 } task_t;
 
-void task_init(void); // Registra o kernel_main como Task 0
+void task_init(void);
 void timer_init(void);
 int task_create(void (*entry)(void), const char* name, int priority);
-uint32_t schedule(uint32_t current_esp);
-
+uint64_t schedule(uint64_t current_rsp);
 uint32_t get_system_ticks(void);
 int get_num_tasks(void);
 task_t* get_task(int index);
-
 #endif

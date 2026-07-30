@@ -10,24 +10,25 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /os
 
+# COMPILANDO COM A BANDEIRA DE 64-BITS NATIVA (-m64) E SEM RED-ZONE!
 CMD dd if=/dev/zero of=disk.img bs=1k count=64 && \
     dd if=/dev/zero of=harddisk.img bs=1M count=1 && \
-    gcc -m32 -c boot.s -o boot.o -fno-pie -fno-pic && \
-    gcc -m32 -c src/util.c -o util.o -Iinclude -ffreestanding -fno-pie -fno-pic -O2 -Wall -Wextra && \
-    gcc -m32 -c src/gfx.c -o gfx.o -Iinclude -ffreestanding -fno-pie -fno-pic -O2 -Wall -Wextra && \
-    gcc -m32 -c src/memory.c -o memory.o -Iinclude -ffreestanding -fno-pie -fno-pic -O2 -Wall -Wextra && \
-    gcc -m32 -c src/idt.c -o idt.o -Iinclude -ffreestanding -fno-pie -fno-pic -O2 -Wall -Wextra && \
-    gcc -m32 -c src/serial.c -o serial.o -Iinclude -ffreestanding -fno-pie -fno-pic -O2 -Wall -Wextra && \
-    gcc -m32 -c src/rtc.c -o rtc.o -Iinclude -ffreestanding -fno-pie -fno-pic -O2 -Wall -Wextra && \
-    gcc -m32 -c src/ata.c -o ata.o -Iinclude -ffreestanding -fno-pie -fno-pic -O2 -Wall -Wextra && \
-    gcc -m32 -c src/vfs.c -o vfs.o -Iinclude -ffreestanding -fno-pie -fno-pic -O2 -Wall -Wextra && \
-    gcc -m32 -c src/sound.c -o sound.o -Iinclude -ffreestanding -fno-pie -fno-pic -O2 -Wall -Wextra && \
-    gcc -m32 -c src/music.c -o music.o -Iinclude -ffreestanding -fno-pie -fno-pic -O2 -Wall -Wextra && \
-    gcc -m32 -c src/bmp.c -o bmp.o -Iinclude -ffreestanding -fno-pie -fno-pic -O2 -Wall -Wextra && \
-    gcc -m32 -c src/task.c -o task.o -Iinclude -ffreestanding -fno-pie -fno-pic -O2 -Wall -Wextra && \
-    gcc -m32 -c src/ui.c -o ui.o -Iinclude -ffreestanding -fno-pie -fno-pic -O2 -Wall -Wextra && \
-    gcc -m32 -c src/kernel.c -o kernel.o -Iinclude -ffreestanding -fno-pie -fno-pic -O2 -Wall -Wextra && \
-    gcc -m32 -no-pie -fno-pic -T linker.ld -o myos.bin -ffreestanding -O2 -nostdlib boot.o util.o gfx.o memory.o idt.o serial.o rtc.o ata.o vfs.o sound.o music.o bmp.o task.o ui.o kernel.o -lgcc && \
+    gcc -m64 -c boot.s -o boot.o -fno-pie -fno-pic && \
+    gcc -m64 -c src/util.c -o util.o -Iinclude -ffreestanding -mno-red-zone -fno-pie -fno-pic -O2 -Wall -Wextra && \
+    gcc -m64 -c src/gfx.c -o gfx.o -Iinclude -ffreestanding -mno-red-zone -fno-pie -fno-pic -O2 -Wall -Wextra && \
+    gcc -m64 -c src/memory.c -o memory.o -Iinclude -ffreestanding -mno-red-zone -fno-pie -fno-pic -O2 -Wall -Wextra && \
+    gcc -m64 -c src/idt.c -o idt.o -Iinclude -ffreestanding -mno-red-zone -fno-pie -fno-pic -O2 -Wall -Wextra && \
+    gcc -m64 -c src/serial.c -o serial.o -Iinclude -ffreestanding -mno-red-zone -fno-pie -fno-pic -O2 -Wall -Wextra && \
+    gcc -m64 -c src/rtc.c -o rtc.o -Iinclude -ffreestanding -mno-red-zone -fno-pie -fno-pic -O2 -Wall -Wextra && \
+    gcc -m64 -c src/ata.c -o ata.o -Iinclude -ffreestanding -mno-red-zone -fno-pie -fno-pic -O2 -Wall -Wextra && \
+    gcc -m64 -c src/vfs.c -o vfs.o -Iinclude -ffreestanding -mno-red-zone -fno-pie -fno-pic -O2 -Wall -Wextra && \
+    gcc -m64 -c src/sound.c -o sound.o -Iinclude -ffreestanding -mno-red-zone -fno-pie -fno-pic -O2 -Wall -Wextra && \
+    gcc -m64 -c src/music.c -o music.o -Iinclude -ffreestanding -mno-red-zone -fno-pie -fno-pic -O2 -Wall -Wextra && \
+    gcc -m64 -c src/bmp.c -o bmp.o -Iinclude -ffreestanding -mno-red-zone -fno-pie -fno-pic -O2 -Wall -Wextra && \
+    gcc -m64 -c src/task.c -o task.o -Iinclude -ffreestanding -mno-red-zone -fno-pie -fno-pic -O2 -Wall -Wextra && \
+    gcc -m64 -c src/ui.c -o ui.o -Iinclude -ffreestanding -mno-red-zone -fno-pie -fno-pic -O2 -Wall -Wextra && \
+    gcc -m64 -c src/kernel.c -o kernel.o -Iinclude -ffreestanding -mno-red-zone -fno-pie -fno-pic -O2 -Wall -Wextra && \
+    gcc -m64 -no-pie -fno-pic -T linker.ld -o myos.bin -ffreestanding -mno-red-zone -O2 -nostdlib boot.o util.o gfx.o memory.o idt.o serial.o rtc.o ata.o vfs.o sound.o music.o bmp.o task.o ui.o kernel.o -lgcc && \
     mkdir -p isodir/boot/grub && \
     cp myos.bin isodir/boot/myos.bin && \
     cp grub.cfg isodir/boot/grub/grub.cfg && \
