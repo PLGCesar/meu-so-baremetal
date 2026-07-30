@@ -1,22 +1,21 @@
 #ifndef VFS_H
 #define VFS_H
-
 #include <stdint.h>
 #include <stddef.h>
 
-#define MAX_FILES 16
+#define MAX_FILES 8
+#define SECTORS_PER_FILE 200 // 100 KB por arquivo!
 
 typedef struct __attribute__((packed)) {
-    char name[32];      // Nome do arquivo
-    uint32_t size;      // Tamanho em bytes
-    uint32_t offset;    // Endereço dentro do disk.img
-    uint8_t  is_used;   // 1 = Ativo, 0 = Livre
+    char name[32];
+    uint32_t size;
+    uint32_t offset;
+    uint8_t  is_used;
     uint8_t  reserved[23];
 } vfs_entry_t;
 
 void vfs_init(void);
 void vfs_list(char* out_buf, size_t max_len);
-const char* vfs_read(const char* filename);
-int vfs_write_file(const char* filename, const char* content);
-
+const uint8_t* vfs_read(const char* filename, size_t* out_size);
+int vfs_write_file(const char* filename, const uint8_t* content, size_t size);
 #endif
