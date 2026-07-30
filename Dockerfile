@@ -19,8 +19,10 @@ CMD dd if=/dev/zero of=disk.img bs=1k count=64 && \
     gcc -m32 -c src/rtc.c -o rtc.o -Iinclude -ffreestanding -fno-pie -fno-pic -O2 -Wall -Wextra && \
     gcc -m32 -c src/vfs.c -o vfs.o -Iinclude -ffreestanding -fno-pie -fno-pic -O2 -Wall -Wextra && \
     gcc -m32 -c src/sound.c -o sound.o -Iinclude -ffreestanding -fno-pie -fno-pic -O2 -Wall -Wextra && \
+    gcc -m32 -c src/music.c -o music.o -Iinclude -ffreestanding -fno-pie -fno-pic -O2 -Wall -Wextra && \
+    gcc -m32 -c src/ui.c -o ui.o -Iinclude -ffreestanding -fno-pie -fno-pic -O2 -Wall -Wextra && \
     gcc -m32 -c src/kernel.c -o kernel.o -Iinclude -ffreestanding -fno-pie -fno-pic -O2 -Wall -Wextra && \
-    gcc -m32 -no-pie -fno-pic -T linker.ld -o myos.bin -ffreestanding -O2 -nostdlib boot.o gfx.o memory.o idt.o serial.o rtc.o vfs.o sound.o kernel.o -lgcc && \
+    gcc -m32 -no-pie -fno-pic -T linker.ld -o myos.bin -ffreestanding -O2 -nostdlib boot.o gfx.o memory.o idt.o serial.o rtc.o vfs.o sound.o music.o ui.o kernel.o -lgcc && \
     mkdir -p isodir/boot/grub && \
     cp myos.bin isodir/boot/myos.bin && \
     cp grub.cfg isodir/boot/grub/grub.cfg && \
