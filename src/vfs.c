@@ -3,6 +3,7 @@
 
 extern uint8_t disk_start[];
 extern uint8_t disk_end[];
+extern uint8_t foto_bmp_start[]; // Ponteiro da foto.bmp vindo do boot.s!
 
 static vfs_entry_t* file_table = NULL;
 static uint8_t* disk_data = NULL;
@@ -24,12 +25,24 @@ static void kstrcpy(char* dest, const char* src) {
 void vfs_init(void) {
     disk_data = disk_start;
     file_table = (vfs_entry_t*)disk_data;
-    serial_write("[VFS] Driver de Disco .img Inicializado com Sucesso!\n");
+    serial_write("[VFS] Driver de Disco .img Inicializado!\n");
+
+    if (file_table[0].is_used == 0) {
+        vfs_write_file("readme.txt", "BEM VINDO AO DISCO VFS DO BARE-METAL OS!");
+        vfs_write_file("notas.txt", "SISTEMA DE ARQUIVOS GRAVANDO NO DISCO IMG");
+        serial_write("[VFS] Disco auto-formatado com arquivos padrao!\n");
+    }
 }
 
 void vfs_list(char* out_buf, size_t max_len) {
     out_buf[0] = '\0';
     size_t pos = 0;
+
+    // Lista o foto.bmp embutido
+    const char* foto_name = "foto.bmp  ";
+    for (int k = 0; foto_name[k] != '\0'; k++) {
+        out_buf[pos++] = foto_name[k];
+    }
 
     for (int i = 0; i < MAX_FILES; i++) {
         if (file_table[i].is_used) {
@@ -45,6 +58,11 @@ void vfs_list(char* out_buf, size_t max_len) {
 }
 
 const char* vfs_read(const char* filename) {
+    // Se solicitar foto.bmp, retorna os bytes reais da foto embutida!
+    if (kstrcmp(filename, "foto.bmp") == 0) {
+        return (const char*)foto_bmp_start;
+    }
+
     for (int i = 0; i < MAX_FILES; i++) {
         if (file_table[i].is_used && kstrcmp(file_table[i].name, filename) == 0) {
             return (const char*)(disk_data + file_table[i].offset);
@@ -54,7 +72,6 @@ const char* vfs_read(const char* filename) {
 }
 
 int vfs_write_file(const char* filename, const char* content) {
-    // 1. Procura se o arquivo já existe para sobrescrever
     for (int i = 0; i < MAX_FILES; i++) {
         if (file_table[i].is_used && kstrcmp(file_table[i].name, filename) == 0) {
             uint8_t* ptr = disk_data + file_table[i].offset;
@@ -65,12 +82,10 @@ int vfs_write_file(const char* filename, const char* content) {
             }
             ptr[len] = '\0';
             file_table[i].size = len;
-            serial_write("[VFS] Arquivo sobrescrito no disco!\n");
             return 1;
         }
     }
 
-    // 2. Cria um arquivo novo em um slot livre
     for (int i = 0; i < MAX_FILES; i++) {
         if (!file_table[i].is_used) {
             kstrcpy(file_table[i].name, filename);
@@ -86,10 +101,8 @@ int vfs_write_file(const char* filename, const char* content) {
             }
             ptr[len] = '\0';
             file_table[i].size = len;
-
-            serial_write("[VFS] Novo arquivo gravado com sucesso no disco .img!\n");
             return 1;
         }
     }
-    return 0; // Disco Cheio
+    return 0;
 }
