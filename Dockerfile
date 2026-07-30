@@ -10,7 +10,6 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /os
 
-# Cria a imagem de disco disk.img (para fotos) e harddisk.img de 1MB (HD IDE/ATA)
 CMD dd if=/dev/zero of=disk.img bs=1k count=64 && \
     dd if=/dev/zero of=harddisk.img bs=1M count=1 && \
     gcc -m32 -c boot.s -o boot.o -fno-pie -fno-pic && \
@@ -24,9 +23,10 @@ CMD dd if=/dev/zero of=disk.img bs=1k count=64 && \
     gcc -m32 -c src/sound.c -o sound.o -Iinclude -ffreestanding -fno-pie -fno-pic -O2 -Wall -Wextra && \
     gcc -m32 -c src/music.c -o music.o -Iinclude -ffreestanding -fno-pie -fno-pic -O2 -Wall -Wextra && \
     gcc -m32 -c src/bmp.c -o bmp.o -Iinclude -ffreestanding -fno-pie -fno-pic -O2 -Wall -Wextra && \
+    gcc -m32 -c src/task.c -o task.o -Iinclude -ffreestanding -fno-pie -fno-pic -O2 -Wall -Wextra && \
     gcc -m32 -c src/ui.c -o ui.o -Iinclude -ffreestanding -fno-pie -fno-pic -O2 -Wall -Wextra && \
     gcc -m32 -c src/kernel.c -o kernel.o -Iinclude -ffreestanding -fno-pie -fno-pic -O2 -Wall -Wextra && \
-    gcc -m32 -no-pie -fno-pic -T linker.ld -o myos.bin -ffreestanding -O2 -nostdlib boot.o gfx.o memory.o idt.o serial.o rtc.o ata.o vfs.o sound.o music.o bmp.o ui.o kernel.o -lgcc && \
+    gcc -m32 -no-pie -fno-pic -T linker.ld -o myos.bin -ffreestanding -O2 -nostdlib boot.o gfx.o memory.o idt.o serial.o rtc.o ata.o vfs.o sound.o music.o bmp.o task.o ui.o kernel.o -lgcc && \
     mkdir -p isodir/boot/grub && \
     cp myos.bin isodir/boot/myos.bin && \
     cp grub.cfg isodir/boot/grub/grub.cfg && \

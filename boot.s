@@ -1,4 +1,3 @@
-/* Padrão Multiboot 1 */
 .set ALIGN,    1<<0
 .set MEMINFO,  1<<1
 .set FLAGS,    ALIGN | MEMINFO
@@ -14,7 +13,7 @@
 .section .bss
 .align 16
 stack_bottom:
-.skip 16384 # 16 KB de Pilha de Memória
+.skip 16384
 stack_top:
 
 .section .text
@@ -22,21 +21,46 @@ stack_top:
 .type _start, @function
 _start:
 	mov $stack_top, %esp
-	push %ebx            # Passa o ponteiro da estrutura Multiboot para o C
+	push %ebx
 	call kernel_main
 	cli
 1:	hlt
 	jmp 1b
 
-/* CARREGA A IDT NA CPU */
 .global load_idt
 load_idt:
     mov 4(%esp), %eax
     lidt (%eax)
-    sti                  # Ativa as interrupções de hardware
+    sti
     ret
 
-/* HANDLER DE EXCEÇÃO 00 (DIVISÃO POR ZERO - KERNEL PANIC) */
+/* ESCALONADOR PREEMPTIVO DE TAREFAS (IRQ0 TIMER 10MS) */
+.global irq0_stub
+.extern schedule
+irq0_stub:
+    pusha
+    cld
+    push %ds
+    push %es
+    push %fs
+    push %gs
+    mov $0x18, %ax
+    mov %ax, %ds
+    mov %ax, %es
+    mov %ax, %fs
+    mov %ax, %gs
+
+    push %esp
+    call schedule
+    mov %eax, %esp
+
+    pop %gs
+    pop %fs
+    pop %es
+    pop %ds
+    popa
+    iret
+
 .global isr0_stub
 .extern exception0_handler
 isr0_stub:
@@ -59,7 +83,6 @@ isr0_stub:
     popa
     iret
 
-/* PONTE DE INTERRUPÇÃO DO TECLADO PS/2 (IRQ1) */
 .global irq1_stub
 .extern keyboard_handler_main
 irq1_stub:
@@ -82,7 +105,6 @@ irq1_stub:
     popa
     iret
 
-/* PONTE DE INTERRUPÇÃO DO MOUSE PS/2 (IRQ12) */
 .global irq12_stub
 .extern mouse_handler_main
 irq12_stub:
@@ -105,9 +127,6 @@ irq12_stub:
     popa
     iret
 
-/* =======================================================
-   EMBUTINDO O DISCO DISK.IMG E A FOTO.BMP NO KERNEL
-   ======================================================= */
 .section .data
 .align 4
 
