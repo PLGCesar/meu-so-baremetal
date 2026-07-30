@@ -22,9 +22,9 @@ stack_top:
 gdt64:
     .quad 0
 gdt64_code:
-    .quad (1<<43) | (1<<44) | (1<<47) | (1<<53) # 64-bit Code
+    .quad 0x00209A0000000000
 gdt64_data:
-    .quad (1<<44) | (1<<47)                     # 64-bit Data
+    .quad 0x0000920000000000
 gdt64_pointer:
     .word gdt64_pointer - gdt64 - 1
     .quad gdt64
