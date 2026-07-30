@@ -22,8 +22,11 @@ void gfx_draw_char(char c, int x, int y, uint32_t color);
 void gfx_draw_string(const char* str, int x, int y, uint32_t color);
 void gfx_draw_number(int num, int x, int y, uint32_t color);
 void gfx_draw_cursor(int x, int y);
-
-// TROCA DE BUFFERS (ELIMINA O PISCA-PISCA TOTALMENTE)
 void gfx_swap_buffers(void);
+
+// GERADORES DE PAISAGENS PROCEDURAIS
+void gfx_draw_landscape_sunset(int x, int y, int w, int h);
+void gfx_draw_landscape_cosmos(int x, int y, int w, int h);
+void gfx_draw_landscape_synthwave(int x, int y, int w, int h);
 
 #endif

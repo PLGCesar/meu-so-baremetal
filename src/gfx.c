@@ -27,7 +27,6 @@ static uint32_t pci_read_config(uint8_t bus, uint8_t slot, uint8_t func, uint8_t
     return inl(0x0CFC);
 }
 
-// Fonte Bitmap 8x8 completa
 static const uint8_t font8x8_basic[128][8] = {
     ['A'] = {0x18, 0x3C, 0x66, 0x66, 0x7E, 0x66, 0x66, 0x00},
     ['B'] = {0x7C, 0x66, 0x66, 0x7C, 0x66, 0x66, 0x7C, 0x00},
@@ -93,21 +92,17 @@ void gfx_init(multiboot_info_t* mbi) {
     }
     if (!framebuffer) framebuffer = (uint32_t*)0xFD000000;
 
-    // ALOCA O BACK BUFFER NA RAM PARA EVITAR O PISCA-PISCA (1.92 MB)
     back_buffer = (uint32_t*)kmalloc(width * height * sizeof(uint32_t));
 }
 
-// Desenha na memória RAM (back_buffer)
 void gfx_put_pixel(int x, int y, uint32_t color) {
     if (!back_buffer) return;
     if (x < 0 || (uint32_t)x >= width || y < 0 || (uint32_t)y >= height) return;
     back_buffer[y * width + x] = color;
 }
 
-// COPIA O QUADRO PRONTO DA RAM PARA A PLACA DE VÍDEO SEM FLICKERING!
 void gfx_swap_buffers(void) {
     if (!framebuffer || !back_buffer) return;
-
     for (uint32_t y = 0; y < height; y++) {
         uint32_t* src = &back_buffer[y * width];
         uint32_t* dst = (uint32_t*)((uint8_t*)framebuffer + (y * pitch));
@@ -195,6 +190,144 @@ void gfx_draw_cursor(int x, int y) {
             } else if (pixel == '.') {
                 gfx_put_pixel(x + cx, y + cy, COLOR_NAVY);
             }
+        }
+    }
+}
+
+// =======================================================
+// ALGORITMOS MATEMÁTICOS DE PAISAGENS PROCEDURAIS
+// =======================================================
+
+// 1. PÔR DO SOL NAS MONTANHAS E OCEANO
+void gfx_draw_landscape_sunset(int x, int y, int w, int h) {
+    int horizon = y + (h * 6) / 10;
+    int sun_cx = x + w / 2;
+    int sun_cy = horizon - 25;
+
+    for (int py = y; py < y + h; py++) {
+        int rel_y = py - y;
+        for (int px = x; px < x + w; px++) {
+            int rel_x = px - x;
+            uint32_t color = 0;
+
+            if (py < horizon) {
+                // Céu: Degradê Roxo (0x330044) -> Laranja (0xFF5500)
+                int t = (rel_y * 255) / (horizon - y);
+                if (t > 255) t = 255;
+                uint32_t r = 0x33 + ((0xFF - 0x33) * t) / 255;
+                uint32_t g = 0x00 + ((0x55 - 0x00) * t) / 255;
+                uint32_t b = 0x44 + ((0x00 - 0x44) * t) / 255;
+                color = (r << 16) | (g << 8) | b;
+
+                // Sol Dourado
+                int dx = px - sun_cx;
+                int dy = py - sun_cy;
+                if (dx*dx + dy*dy < 900) {
+                    color = 0xFFEEAA;
+                }
+
+                // Silhueta de Montanhas
+                int m_height = ((rel_x * 7) % 35) + ((rel_x * 13) % 25);
+                if (py > horizon - 15 - m_height) {
+                    color = 0x110022;
+                }
+            } else {
+                // Oceano com reflexo do Sol
+                int dx = px - sun_cx;
+                if (dx < 0) dx = -dx;
+                int ripple = (rel_x * 17 + rel_y * 9) % 13;
+                if (dx < 70 && ripple < 6) {
+                    color = 0xFF8800; // Reflexo dourado
+                } else {
+                    color = 0x0B061A; // Mar escuro
+                }
+            }
+            gfx_put_pixel(px, py, color);
+        }
+    }
+}
+
+// 2. COSMOS, NEBULOSA E PLANETA COM ANÉIS
+void gfx_draw_landscape_cosmos(int x, int y, int w, int h) {
+    int cx = x + w / 3;
+    int cy = y + h / 2;
+    int p_cx = x + (w * 3) / 4;
+    int p_cy = y + h / 3;
+
+    for (int py = y; py < y + h; py++) {
+        for (int px = x; px < x + w; px++) {
+            uint32_t color = 0x03030D;
+
+            // Estrelas
+            int hash = (px * 73 + py * 137) % 101;
+            if (hash == 7) color = 0xFFFFFF;
+            else if (hash == 19) color = 0x88EEFF;
+
+            // Nebulosa Rosa
+            int dx = px - cx;
+            int dy = py - cy;
+            int dist2 = dx*dx + dy*dy;
+            if (dist2 < 10000) {
+                int intensity = (10000 - dist2) * 200 / 10000;
+                color += ((intensity) << 16) | (intensity / 3);
+            }
+
+            // Planeta Azul
+            int pdx = px - p_cx;
+            int pdy = py - p_cy;
+            int pdist2 = pdx*pdx + pdy*pdy;
+            if (pdist2 < 900) {
+                color = 0x0088DD;
+            } else if (pdx*2 + pdy*5 > -40 && pdx*2 + pdy*5 < 40 && pdist2 < 2500) {
+                color = 0xAACCFF; // Anel do Planeta
+            }
+
+            gfx_put_pixel(px, py, color);
+        }
+    }
+}
+
+// 3. CYBERPUNK SYNTHWAVE & NEON GRID
+void gfx_draw_landscape_synthwave(int x, int y, int w, int h) {
+    int horizon = y + h / 2;
+    int sun_cx = x + w / 2;
+
+    for (int py = y; py < y + h; py++) {
+        int rel_y = py - y;
+        for (int px = x; px < x + w; px++) {
+            uint32_t color = 0;
+
+            if (py < horizon) {
+                int t = (rel_y * 255) / (horizon - y);
+                color = ((0x10 + ((0xFF - 0x10) * t) / 255) << 16) |
+                        ((0x00) << 8) |
+                        (0x30 + ((0x7F - 0x30) * t) / 255);
+
+                // Sol Neon
+                int dx = px - sun_cx;
+                int dy = py - (horizon - 25);
+                if (dx*dx + dy*dy < 1200) {
+                    if ((py % 6) > 2) {
+                        color = 0xFFEE00;
+                    }
+                }
+            } else {
+                // Chão de Grade Neon
+                color = 0x050010;
+                int ground_y = py - horizon;
+                if (ground_y == 5 || ground_y == 15 || ground_y == 30 || ground_y == 50 || ground_y == 80 || ground_y == 120) {
+                    color = 0xFF007F; // Rosa neon
+                }
+                int dx = px - sun_cx;
+                if (ground_y > 0) {
+                    int perspective = (dx * 100) / ground_y;
+                    if (perspective % 30 == 0) {
+                        color = 0x00FFFF; // Ciano neon
+                    }
+                }
+            }
+
+            gfx_put_pixel(px, py, color);
         }
     }
 }
