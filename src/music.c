@@ -1,5 +1,7 @@
 #include "../include/music.h"
 #include "../include/sound.h"
+#include <stddef.h>
+#include <stdint.h>
 
 static note_t track_tetris[] = {
     {NOTE_E5, 4}, {NOTE_B4, 2}, {NOTE_C5, 2}, {NOTE_D5, 4}, {NOTE_C5, 2}, {NOTE_B4, 2},
