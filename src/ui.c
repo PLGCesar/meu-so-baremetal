@@ -37,7 +37,6 @@ static char input_buffer[32];
 static int input_index = 0;
 static char shell_output[128] = "SYSTEM VFS & ELF64 READY! TYPE 'LS' OR 'RUN DEMO.ELF'.";
 
-// CANVAS DO PAINT (160x120 pixels)
 static uint32_t paint_canvas[160 * 120];
 static uint32_t paint_color = 0xFFFFFF;
 
@@ -67,7 +66,7 @@ void ui_init(void) {
     windows[3] = (window_t){3, 3, 120, 30, 580, 500, 0, 4}; // Galeria
     windows[4] = (window_t){4, 4, 220, 70, 520, 440, 0, 5}; // Musica
     windows[5] = (window_t){5, 5, 160, 40, 600, 460, 0, 6}; // Tarefas
-    windows[6] = (window_t){6, 6, 90,  50, 540, 480, 1, 7}; // Paint (Inicia aberta)
+    windows[6] = (window_t){6, 6, 90,  50, 540, 480, 1, 7}; // Paint
     windows[7] = (window_t){7, 7, 200, 80, 500, 380, 0, 8}; // ELF Loader
 
     top_z_index = 8;
@@ -164,16 +163,16 @@ void ui_handle_mouse(void) {
 
     if (just_pressed) sound_click();
 
-    // 1. CLIQUE NOS ÍCONES DO DESKTOP (8 ÍCONES ESTILIZADOS NA LATERAL ESQUERDA)
+    // 1. CLIQUE NOS ÍCONES DO DESKTOP
     if (just_pressed && mouse_x >= 15 && mouse_x <= 135) {
-        if (mouse_y >= 20 && mouse_y <= 80) bring_to_front(0);        // Shell VFS
-        else if (mouse_y >= 85 && mouse_y <= 145) bring_to_front(1);  // Memoria
-        else if (mouse_y >= 150 && mouse_y <= 210) bring_to_front(2); // IDT CPU
-        else if (mouse_y >= 215 && mouse_y <= 275) bring_to_front(3); // Galeria
-        else if (mouse_y >= 280 && mouse_y <= 340) bring_to_front(4); // Musica
-        else if (mouse_y >= 345 && mouse_y <= 405) bring_to_front(5); // Tarefas
-        else if (mouse_y >= 410 && mouse_y <= 470) bring_to_front(6); // Paint
-        else if (mouse_y >= 475 && mouse_y <= 535) bring_to_front(7); // ELF Loader
+        if (mouse_y >= 20 && mouse_y <= 80) bring_to_front(0);
+        else if (mouse_y >= 85 && mouse_y <= 145) bring_to_front(1);
+        else if (mouse_y >= 150 && mouse_y <= 210) bring_to_front(2);
+        else if (mouse_y >= 215 && mouse_y <= 275) bring_to_front(3);
+        else if (mouse_y >= 280 && mouse_y <= 340) bring_to_front(4);
+        else if (mouse_y >= 345 && mouse_y <= 405) bring_to_front(5);
+        else if (mouse_y >= 410 && mouse_y <= 470) bring_to_front(6);
+        else if (mouse_y >= 475 && mouse_y <= 535) bring_to_front(7);
     }
 
     // 2. Botão START
@@ -226,9 +225,9 @@ void ui_handle_mouse(void) {
                 else if (mouse_x >= w->x + 220 && mouse_x <= w->x + 400) music_next_track();
             }
 
-            // Controles do Gerenciador de Tarefas (App 5 - Criar Processo ao vivo)
-            if (w->app_type == 5 && mouse_y >= w->y + 400 && mouse_y <= w->y + 430 &&
-                mouse_x >= w->x + 40 && mouse_x <= w->x + 200) {
+            // Controles do Gerenciador de Tarefas (App 5 - Criar Processo)
+            if (w->app_type == 5 && mouse_y >= w->y + 395 && mouse_y <= w->y + 425 &&
+                mouse_x >= w->x + 40 && mouse_x <= w->x + 210) {
                 task_create(dummy_task_created, "Nova_Task_GUI", 3);
             }
 
@@ -238,16 +237,32 @@ void ui_handle_mouse(void) {
                 int btn_y2 = w->y + 430;
 
                 if (mouse_y >= btn_y1 && mouse_y <= btn_y1 + 30) {
-                    if (mouse_x >= w->x + 20 && mouse_x <= w->x + 110) gallery_photo = 0;
-                    else if (mouse_x >= w->x + 120 && mouse_x <= w->x + 200) gallery_photo = 1;
-                    else if (mouse_x >= w->x + 210 && mouse_x <= w->x + 310) gallery_photo = 2;
-                    else if (mouse_x >= w->x + 320 && mouse_x <= w->x + 450) gallery_photo = 3;
+                    if (mouse_x >= w->x + 20 && mouse_x <= w->x + 110) {
+                        gallery_photo = 0;
+                        kstrcpy(gallery_status_msg, "PAISAGEM: POR DO SOL NAS MONTANHAS GERADO!");
+                    } else if (mouse_x >= w->x + 120 && mouse_x <= w->x + 200) {
+                        gallery_photo = 1;
+                        kstrcpy(gallery_status_msg, "PAISAGEM: GALAXIA E PLANETA GERADO!");
+                    } else if (mouse_x >= w->x + 210 && mouse_x <= w->x + 310) {
+                        gallery_photo = 2;
+                        kstrcpy(gallery_status_msg, "PAISAGEM: CYBERPUNK SYNTHWAVE GERADO!");
+                    } else if (mouse_x >= w->x + 320 && mouse_x <= w->x + 450) {
+                        gallery_photo = 3;
+                        kstrcpy(gallery_status_msg, "ABRINDO ARQUIVO FOTO.BMP DO DISCO VFS...");
+                    }
                 }
 
                 if (mouse_y >= btn_y2 && mouse_y <= btn_y2 + 30) {
-                    if (mouse_x >= w->x + 20 && mouse_x <= w->x + 210) current_wallpaper = gallery_photo;
-                    else if (mouse_x >= w->x + 225 && mouse_x <= w->x + 435) vfs_write_file("paisagem.art", (const uint8_t*)"ARTE RECENTE DA GALERIA", 23);
-                    else if (mouse_x >= w->x + 450 && mouse_x <= w->x + 610) current_wallpaper = -1;
+                    if (mouse_x >= w->x + 20 && mouse_x <= w->x + 210) {
+                        current_wallpaper = gallery_photo;
+                        kstrcpy(gallery_status_msg, "PAISAGEM DEFINIDA COMO WALLPAPER DO DESKTOP!");
+                    } else if (mouse_x >= w->x + 225 && mouse_x <= w->x + 435) {
+                        vfs_write_file("paisagem.art", (const uint8_t*)"ARTE RECENTE DA GALERIA", 23);
+                        kstrcpy(gallery_status_msg, "PAISAGEM SALVA COM SUCESSO NO DISCO VFS!");
+                    } else if (mouse_x >= w->x + 450 && mouse_x <= w->x + 610) {
+                        current_wallpaper = -1;
+                        kstrcpy(gallery_status_msg, "WALLPAPER RESETADO PARA O PADRAO ESCURO.");
+                    }
                 }
             }
 
@@ -260,8 +275,7 @@ void ui_handle_mouse(void) {
                     else if (mouse_x >= w->x + 120 && mouse_x <= w->x + 160) paint_color = 0x0000FF;
                     else if (mouse_x >= w->x + 170 && mouse_x <= w->x + 210) paint_color = 0xFFFFFF;
                     else if (mouse_x >= w->x + 220 && mouse_x <= w->x + 260) paint_color = 0x000000;
-                    else if (mouse_x >= w->x + 350 && mouse_x <= w->x + 510) {
-                        // EXPORTA A PINTURA COMO ARQUIVO .BMP REAL
+                    else if (mouse_x >= w->x + 310 && mouse_x <= w->x + 510) {
                         bmp_export("arte.bmp", paint_canvas, 160, 120);
                     }
                 }
@@ -270,16 +284,19 @@ void ui_handle_mouse(void) {
     }
 
     // ARRASTO DO MOUSE DENTRO DO CANVAS DO PAINT (APP 6)
-    if (click && top_id != -1 && windows[top_id].app_type == 6) {
-        window_t* w = &windows[top_id];
-        int c_x = w->x + 30, c_y = w->y + 60;
-        if (mouse_x >= c_x && mouse_x < c_x + 480 && mouse_y >= c_y && mouse_y < c_y + 360) {
-            int p_x = (mouse_x - c_x) / 3;
-            int p_y = (mouse_y - c_y) / 3;
-            for (int dy = -1; dy <= 1; dy++) {
-                for (int dx = -1; dx <= 1; dx++) {
-                    if (p_x + dx >= 0 && p_x + dx < 160 && p_y + dy >= 0 && p_y + dy < 120) {
-                        paint_canvas[(p_y + dy) * 160 + (p_x + dx)] = paint_color;
+    if (click) {
+        int paint_win = find_clicked_window(mouse_x, mouse_y);
+        if (paint_win != -1 && windows[paint_win].app_type == 6) {
+            window_t* w = &windows[paint_win];
+            int c_x = w->x + 30, c_y = w->y + 60;
+            if (mouse_x >= c_x && mouse_x < c_x + 480 && mouse_y >= c_y && mouse_y < c_y + 360) {
+                int p_x = (mouse_x - c_x) / 3;
+                int p_y = (mouse_y - c_y) / 3;
+                for (int dy = -1; dy <= 1; dy++) {
+                    for (int dx = -1; dx <= 1; dx++) {
+                        if (p_x + dx >= 0 && p_x + dx < 160 && p_y + dy >= 0 && p_y + dy < 120) {
+                            paint_canvas[(p_y + dy) * 160 + (p_x + dx)] = paint_color;
+                        }
                     }
                 }
             }
@@ -363,6 +380,8 @@ void draw_single_window(window_t* w) {
         gfx_draw_string("USAR COMO WALLPAPER", win_x + 30, btn_y2 + 11, COLOR_WHITE);
         gfx_draw_rect(win_x + 225, btn_y2, 210, 30, COLOR_GREEN);
         gfx_draw_string("SALVAR NO DISCO VFS", win_x + 245, btn_y2 + 11, COLOR_NAVY);
+
+        gfx_draw_string(gallery_status_msg, win_x + 30, win_y + 475, COLOR_WHITE);
     } else if (w->app_type == 4) {
         gfx_draw_string("PLAYER DE MUSICA CHIPTUNE:", win_x + 30, win_y + 50, COLOR_GREEN);
         gfx_draw_rect(win_x + 30, win_y + 90, win_w - 60, 320, COLOR_NAVY);
@@ -373,7 +392,7 @@ void draw_single_window(window_t* w) {
         gfx_draw_rect(win_x + 220, win_y + 160, 180, 40, COLOR_BLUE);
         gfx_draw_string("MUDAR FAIXA", win_x + 250, win_y + 175, COLOR_WHITE);
     } else if (w->app_type == 5) {
-        gfx_draw_string("GERENCIADOR DE TAREFAS DA CPU:", win_x + 30, win_y + 45, COLOR_GREEN);
+        gfx_draw_string("GERENCIADOR DE TAREFAS (ROUND-ROBIN MULTITASKING):", win_x + 30, win_y + 45, COLOR_GREEN);
         gfx_draw_rect(win_x + 30, win_y + 70, win_w - 60, 310, COLOR_NAVY);
         gfx_draw_string("PID   NOME              PRIORIDADE   ESTADO      TICKS", win_x + 40, win_y + 85, COLOR_BLUE);
 
@@ -431,41 +450,31 @@ void ui_render(void) {
     else if (current_wallpaper == 2) gfx_draw_landscape_synthwave(0, 0, 800, 600);
     else gfx_clear(COLOR_DARK_SLATE);
 
-    // ÍCONES GRAFICOS DO DESKTOP ESTILIZADOS
     int ic_x = 15;
-    // 1. Shell
     gfx_draw_rect(ic_x, 20, 115, 55, COLOR_NAVY); gfx_draw_rect(ic_x+5, 25, 105, 18, COLOR_BLUE);
     gfx_draw_string("1. SHELL", ic_x+15, 30, COLOR_WHITE); gfx_draw_string("DISCO VFS", ic_x+20, 52, COLOR_GREEN);
 
-    // 2. RAM
     gfx_draw_rect(ic_x, 85, 115, 55, COLOR_NAVY); gfx_draw_rect(ic_x+5, 90, 105, 18, COLOR_BLUE);
     gfx_draw_string("2. MEMORIA", ic_x+12, 95, COLOR_WHITE); gfx_draw_string("RAM HEAP", ic_x+20, 117, COLOR_GREEN);
 
-    // 3. Hardware
     gfx_draw_rect(ic_x, 150, 115, 55, COLOR_NAVY); gfx_draw_rect(ic_x+5, 155, 105, 18, COLOR_BLUE);
     gfx_draw_string("3. HARDWARE", ic_x+10, 160, COLOR_WHITE); gfx_draw_string("IDT & CPU", ic_x+20, 182, COLOR_GREEN);
 
-    // 4. Galeria
     gfx_draw_rect(ic_x, 215, 115, 55, COLOR_NAVY); gfx_draw_rect(ic_x+5, 220, 105, 18, COLOR_BLUE);
     gfx_draw_string("4. GALERIA", ic_x+15, 225, COLOR_WHITE); gfx_draw_string("PINTOR/BMP", ic_x+15, 247, COLOR_GREEN);
 
-    // 5. Música
     gfx_draw_rect(ic_x, 280, 115, 55, COLOR_NAVY); gfx_draw_rect(ic_x+5, 285, 105, 18, COLOR_RED);
     gfx_draw_string("5. MUSICA", ic_x+20, 290, COLOR_WHITE); gfx_draw_string("PLAYER 8BIT", ic_x+12, 312, COLOR_GREEN);
 
-    // 6. Tarefas
     gfx_draw_rect(ic_x, 345, 115, 55, COLOR_NAVY); gfx_draw_rect(ic_x+5, 350, 105, 18, COLOR_PURPLE);
     gfx_draw_string("6. TAREFAS", ic_x+15, 355, COLOR_WHITE); gfx_draw_string("CPU TASK", ic_x+20, 377, COLOR_WHITE);
 
-    // 7. Paint
     gfx_draw_rect(ic_x, 410, 115, 55, COLOR_NAVY); gfx_draw_rect(ic_x+5, 415, 105, 18, COLOR_ORANGE);
     gfx_draw_string("7. PAINT", ic_x+20, 420, COLOR_WHITE); gfx_draw_string("DESENHO", ic_x+25, 442, COLOR_WHITE);
 
-    // 8. ELF Loader
     gfx_draw_rect(ic_x, 475, 115, 55, COLOR_NAVY); gfx_draw_rect(ic_x+5, 480, 105, 18, COLOR_GREEN);
     gfx_draw_string("8. RUN ELF", ic_x+15, 485, COLOR_WHITE); gfx_draw_string("EXEC 64BIT", ic_x+15, 507, COLOR_WHITE);
 
-    // BARRA DE TAREFAS
     gfx_draw_rect(0, 560, 800, 40, COLOR_NAVY);
     gfx_draw_rect(10, 565, 80, 30, start_menu_open ? COLOR_GREEN : COLOR_BLUE);
     gfx_draw_string("START", 30, 576, COLOR_NAVY);
