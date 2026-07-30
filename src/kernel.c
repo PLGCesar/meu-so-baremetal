@@ -6,19 +6,22 @@
 #include "../include/rtc.h"
 #include "../include/vfs.h"
 
+// ESTADO DO DESKTOP WALLPAPER (-1 = Escuro Padrão, 0 = Pôr do Sol, 1 = Galáxia, 2 = Synthwave)
+static int current_wallpaper = -1;
+
 // ESTADO DA JANELA
-static int win_x = 80, win_y = 40, win_w = 640, win_h = 500;
+static int win_x = 80, win_y = 30, win_w = 640, win_h = 520;
 static int win_open = 1;
 static int is_dragging = 0;
 static int drag_off_x = 0, drag_off_y = 0;
 
 // ESTADO DO MENU START
 static int start_menu_open = 0;
-static int active_app = 3; // 0 = Shell, 1 = Memoria, 2 = IDT, 3 = Galeria (Padrão!)
+static int active_app = 3; // 0 = Shell, 1 = Memoria, 2 = IDT, 3 = Galeria
 
-// ESTADO DA GALERIA PROCEDURAL
-static int gallery_photo = 0; // 0 = Pôr do Sol, 1 = Galáxia, 2 = Synthwave
-static char gallery_status_msg[64] = "CLIQUE NOS BOTOES PARA GERAR PAISAGENS!";
+// ESTADO DA GALERIA
+static int gallery_photo = 0;
+static char gallery_status_msg[64] = "CLIQUE NOS BOTOES PARA USAR COMO WALLPAPER OU SALVAR!";
 
 // ESTADO DO SHELL (CLI)
 static char input_buffer[32];
@@ -104,12 +107,12 @@ void handle_mouse_events(void) {
         return;
     }
 
-    // 2. Menu Start Pop-up (4 Opções)
+    // 2. Menu Start Pop-up
     if (start_menu_open && just_pressed && mouse_x >= 10 && mouse_x <= 200 && mouse_y >= 390 && mouse_y <= 560) {
         if (mouse_y >= 400 && mouse_y < 435) { active_app = 0; win_open = 1; }
         else if (mouse_y >= 435 && mouse_y < 470) { active_app = 1; win_open = 1; }
         else if (mouse_y >= 470 && mouse_y < 510) { active_app = 2; win_open = 1; }
-        else if (mouse_y >= 510 && mouse_y <= 555) { active_app = 3; win_open = 1; } // Galeria!
+        else if (mouse_y >= 510 && mouse_y <= 555) { active_app = 3; win_open = 1; }
         start_menu_open = 0;
         return;
     }
@@ -125,33 +128,41 @@ void handle_mouse_events(void) {
 
     // 4. Clique nos Botões da Galeria
     if (win_open && active_app == 3 && just_pressed) {
-        int btn_y = win_y + 400;
-        if (mouse_y >= btn_y && mouse_y <= btn_y + 30) {
-            if (mouse_x >= win_x + 20 && mouse_x <= win_x + 130) {
-                gallery_photo = 0;
-                const char* msg = "PAISAGEM: POR DO SOL NAS MONTANHAS GERADO!";
+        int btn_y1 = win_y + 390;
+        int btn_y2 = win_y + 430;
+
+        // Linha 1 de Botões: Seleção de Fotos
+        if (mouse_y >= btn_y1 && mouse_y <= btn_y1 + 30) {
+            if (mouse_x >= win_x + 20 && mouse_x <= win_x + 130) gallery_photo = 0;
+            else if (mouse_x >= win_x + 140 && mouse_x <= win_x + 230) gallery_photo = 1;
+            else if (mouse_x >= win_x + 240 && mouse_x <= win_x + 350) gallery_photo = 2;
+        }
+
+        // Linha 2 de Botões: Wallpaper e Salvar
+        if (mouse_y >= btn_y2 && mouse_y <= btn_y2 + 30) {
+            if (mouse_x >= win_x + 20 && mouse_x <= win_x + 210) {
+                // DEFINIR COMO WALLPAPER DO DESKTOP!
+                current_wallpaper = gallery_photo;
+                const char* msg = "PAISAGEM DEFINIDA COMO WALLPAPER DO DESKTOP!";
                 for (int i = 0; msg[i] != '\0'; i++) gallery_status_msg[i] = msg[i];
-            } else if (mouse_x >= win_x + 140 && mouse_x <= win_x + 230) {
-                gallery_photo = 1;
-                const char* msg = "PAISAGEM: GALAXIA E PLANETA GERADO!";
-                for (int i = 0; msg[i] != '\0'; i++) gallery_status_msg[i] = msg[i];
-            } else if (mouse_x >= win_x + 240 && mouse_x <= win_x + 350) {
-                gallery_photo = 2;
-                const char* msg = "PAISAGEM: CYBERPUNK SYNTHWAVE GERADO!";
-                for (int i = 0; msg[i] != '\0'; i++) gallery_status_msg[i] = msg[i];
-            } else if (mouse_x >= win_x + 370 && mouse_x <= win_x + 610) {
-                // SALVAR PAISAGEM NO DISCO VFS!
-                if (gallery_photo == 0) vfs_write_file("paisagem.art", "ARTE: POR DO SOL NAS MONTANHAS (800X600)");
-                else if (gallery_photo == 1) vfs_write_file("paisagem.art", "ARTE: COSMOS E GALAXIA 3D (800X600)");
-                else if (gallery_photo == 2) vfs_write_file("paisagem.art", "ARTE: CYBERPUNK NEON SYNTHWAVE (800X600)");
+            } else if (mouse_x >= win_x + 225 && mouse_x <= win_x + 435) {
+                // SALVAR NO DISCO VFS
+                if (gallery_photo == 0) vfs_write_file("paisagem.art", "ARTE: POR DO SOL NAS MONTANHAS (IMPROVED)");
+                else if (gallery_photo == 1) vfs_write_file("paisagem.art", "ARTE: COSMOS E GALAXIA 3D (IMPROVED)");
+                else if (gallery_photo == 2) vfs_write_file("paisagem.art", "ARTE: CYBERPUNK NEON SYNTHWAVE (IMPROVED)");
 
                 const char* msg = "PAISAGEM SALVA COM SUCESSO NO DISCO .IMG!";
+                for (int i = 0; msg[i] != '\0'; i++) gallery_status_msg[i] = msg[i];
+            } else if (mouse_x >= win_x + 450 && mouse_x <= win_x + 610) {
+                // RESETAR WALLPAPER
+                current_wallpaper = -1;
+                const char* msg = "WALLPAPER RESETADO PARA O PADRAO ESCURO.";
                 for (int i = 0; msg[i] != '\0'; i++) gallery_status_msg[i] = msg[i];
             }
         }
     }
 
-    // 5. Arrasto da Janela
+    // 5. Arrasto da Janela (Drag & Drop)
     if (just_pressed && mouse_x >= win_x && mouse_x <= (win_x + win_w - 50) &&
         mouse_y >= win_y && mouse_y <= (win_y + 30)) {
         is_dragging = 1; drag_off_x = mouse_x - win_x; drag_off_y = mouse_y - win_y;
@@ -169,9 +180,18 @@ void handle_mouse_events(void) {
 }
 
 void render_gui(void) {
-    gfx_clear(COLOR_DARK_SLATE);
+    // 1. DESENHA O PLANO DE FUNDO (WALLPAPER DINÂMICO OU PADRÃO)
+    if (current_wallpaper == 0) {
+        gfx_draw_landscape_sunset(0, 0, 800, 600);
+    } else if (current_wallpaper == 1) {
+        gfx_draw_landscape_cosmos(0, 0, 800, 600);
+    } else if (current_wallpaper == 2) {
+        gfx_draw_landscape_synthwave(0, 0, 800, 600);
+    } else {
+        gfx_clear(COLOR_DARK_SLATE);
+    }
 
-    // BARRA DE TAREFAS
+    // 2. BARRA DE TAREFAS
     gfx_draw_rect(0, 560, 800, 40, COLOR_NAVY);
     gfx_draw_rect(10, 565, 80, 30, start_menu_open ? COLOR_GREEN : COLOR_BLUE);
     gfx_draw_string("START", 30, 576, COLOR_NAVY);
@@ -182,7 +202,7 @@ void render_gui(void) {
     format_time_string(time_str, clock_brt.hour, clock_brt.minute, clock_brt.second);
     gfx_draw_string(time_str, 680, 576, COLOR_WHITE);
 
-    // JANELA PRINCIPAL
+    // 3. JANELA PRINCIPAL (SE ABERTA)
     if (win_open) {
         gfx_draw_rect(win_x + 8, win_y + 8, win_w, win_h, 0x11111B);
         gfx_draw_rect(win_x, win_y, win_w, win_h, COLOR_GRAY);
@@ -223,43 +243,46 @@ void render_gui(void) {
             gfx_draw_string("STATUS DA TABELA IDT: ATIVA (256 GATES)", win_x + 50, win_y + 120, COLOR_WHITE);
             gfx_draw_string("SISTEMA DE ARQUIVOS VFS: ATIVO NO DISCO .IMG", win_x + 50, win_y + 160, COLOR_GREEN);
         } else if (active_app == 3) {
-            // APP DA GALERIA PROCEDURAL
-            gfx_draw_string("GALERIA PROCEDURAL - RENDERIZADOR DE LUZ E PIXELS:", win_x + 30, win_y + 45, COLOR_GREEN);
+            // GALERIA PROCEDURAL
+            gfx_draw_string("GALERIA PROCEDURAL - RENDERIZADOR DE LUZ E PIXELS:", win_x + 30, win_y + 42, COLOR_GREEN);
 
-            // CANVAS DE DESENHO DA PAISAGEM (580x280)
             int canvas_x = win_x + 30;
-            int canvas_y = win_y + 70;
+            int canvas_y = win_y + 65;
             int canvas_w = 580;
             int canvas_h = 310;
 
-            if (gallery_photo == 0) {
-                gfx_draw_landscape_sunset(canvas_x, canvas_y, canvas_w, canvas_h);
-            } else if (gallery_photo == 1) {
-                gfx_draw_landscape_cosmos(canvas_x, canvas_y, canvas_w, canvas_h);
-            } else if (gallery_photo == 2) {
-                gfx_draw_landscape_synthwave(canvas_x, canvas_y, canvas_w, canvas_h);
-            }
+            if (gallery_photo == 0) gfx_draw_landscape_sunset(canvas_x, canvas_y, canvas_w, canvas_h);
+            else if (gallery_photo == 1) gfx_draw_landscape_cosmos(canvas_x, canvas_y, canvas_w, canvas_h);
+            else if (gallery_photo == 2) gfx_draw_landscape_synthwave(canvas_x, canvas_y, canvas_w, canvas_h);
 
-            // BOTÕES DE SELEÇÃO E SALVAR
-            int btn_y = win_y + 400;
-            gfx_draw_rect(win_x + 20, btn_y, 110, 30, gallery_photo == 0 ? COLOR_BLUE : COLOR_NAVY);
-            gfx_draw_string("1. POR DO SOL", win_x + 25, btn_y + 11, COLOR_WHITE);
+            // BOTÕES DE SELEÇÃO DE FOTO (LINHA 1)
+            int btn_y1 = win_y + 390;
+            gfx_draw_rect(win_x + 20, btn_y1, 110, 30, gallery_photo == 0 ? COLOR_BLUE : COLOR_NAVY);
+            gfx_draw_string("1. POR DO SOL", win_x + 25, btn_y1 + 11, COLOR_WHITE);
 
-            gfx_draw_rect(win_x + 140, btn_y, 90, 30, gallery_photo == 1 ? COLOR_BLUE : COLOR_NAVY);
-            gfx_draw_string("2. GALAXIA", win_x + 145, btn_y + 11, COLOR_WHITE);
+            gfx_draw_rect(win_x + 140, btn_y1, 90, 30, gallery_photo == 1 ? COLOR_BLUE : COLOR_NAVY);
+            gfx_draw_string("2. GALAXIA", win_x + 145, btn_y1 + 11, COLOR_WHITE);
 
-            gfx_draw_rect(win_x + 240, btn_y, 110, 30, gallery_photo == 2 ? COLOR_BLUE : COLOR_NAVY);
-            gfx_draw_string("3. SYNTHWAVE", win_x + 245, btn_y + 11, COLOR_WHITE);
+            gfx_draw_rect(win_x + 240, btn_y1, 110, 30, gallery_photo == 2 ? COLOR_BLUE : COLOR_NAVY);
+            gfx_draw_string("3. SYNTHWAVE", win_x + 245, btn_y1 + 11, COLOR_WHITE);
 
-            gfx_draw_rect(win_x + 370, btn_y, 240, 30, COLOR_GREEN);
-            gfx_draw_string("SALVAR NO DISCO VFS", win_x + 400, btn_y + 11, COLOR_NAVY);
+            // BOTÕES DE WALLPAPER E SALVAR (LINHA 2)
+            int btn_y2 = win_y + 430;
+            gfx_draw_rect(win_x + 20, btn_y2, 190, 30, COLOR_BLUE);
+            gfx_draw_string("USAR COMO WALLPAPER", win_x + 30, btn_y2 + 11, COLOR_WHITE);
 
-            // MENSAGEM DE STATUS DA GALERIA
-            gfx_draw_string(gallery_status_msg, win_x + 30, win_y + 450, COLOR_WHITE);
+            gfx_draw_rect(win_x + 225, btn_y2, 210, 30, COLOR_GREEN);
+            gfx_draw_string("SALVAR NO DISCO VFS", win_x + 245, btn_y2 + 11, COLOR_NAVY);
+
+            gfx_draw_rect(win_x + 450, btn_y2, 160, 30, COLOR_RED);
+            gfx_draw_string("RESET WALLPAPER", win_x + 465, btn_y2 + 11, COLOR_WHITE);
+
+            // STATUS
+            gfx_draw_string(gallery_status_msg, win_x + 30, win_y + 475, COLOR_WHITE);
         }
     }
 
-    // MENU START POP-UP
+    // 4. MENU START POP-UP
     if (start_menu_open) {
         gfx_draw_rect(10, 390, 190, 170, COLOR_NAVY);
         gfx_draw_rect(10, 390, 190, 25, COLOR_BLUE);
@@ -271,13 +294,14 @@ void render_gui(void) {
         gfx_draw_string("> 4. GALERIA (PINTOR)", 20, 530, active_app == 3 ? COLOR_GREEN : COLOR_WHITE);
     }
 
+    // 5. PONTEIRO DO MOUSE
     gfx_draw_cursor(mouse_x, mouse_y);
     gfx_swap_buffers();
 }
 
 void kernel_main(multiboot_info_t* mbi) {
     serial_init();
-    serial_write("[LOG SERIAL] INICIALIZANDO KERNEL BARE-METAL v0.8\n");
+    serial_write("[LOG SERIAL] INICIALIZANDO KERNEL BARE-METAL v0.9\n");
 
     memory_init(mbi);
     gfx_init(mbi);
