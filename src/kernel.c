@@ -5,25 +5,23 @@
 #include "../include/serial.h"
 #include "../include/rtc.h"
 #include "../include/vfs.h"
+#include "../include/sound.h"
 
-// ESTADO DO DESKTOP WALLPAPER (-1 = Escuro Padrão, 0 = Pôr do Sol, 1 = Galáxia, 2 = Synthwave)
 static int current_wallpaper = -1;
 
 // ESTADO DA JANELA
-static int win_x = 80, win_y = 30, win_w = 640, win_h = 520;
+static int win_x = 180, win_y = 40, win_w = 580, win_h = 500;
 static int win_open = 1;
 static int is_dragging = 0;
 static int drag_off_x = 0, drag_off_y = 0;
 
-// ESTADO DO MENU START
+// ESTADO DO MENU START E APPS
 static int start_menu_open = 0;
-static int active_app = 3; // 0 = Shell, 1 = Memoria, 2 = IDT, 3 = Galeria
+static int active_app = 0; // 0 = Shell, 1 = Memoria, 2 = IDT, 3 = Galeria
 
-// ESTADO DA GALERIA
 static int gallery_photo = 0;
 static char gallery_status_msg[64] = "CLIQUE NOS BOTOES PARA USAR COMO WALLPAPER OU SALVAR!";
 
-// ESTADO DO SHELL (CLI)
 static char input_buffer[32];
 static int input_index = 0;
 static char shell_output[128] = "SISTEMA VFS INICIALIZADO! DIGITE 'LS' OU 'HELP'.";
@@ -101,13 +99,25 @@ void handle_mouse_events(void) {
     int just_pressed = (click && !prev_mouse_left);
     prev_mouse_left = click;
 
-    // 1. Botão START
+    if (just_pressed) {
+        sound_click(); // TOCA SOM DE CLIQUE NO MOUSE!
+    }
+
+    // 1. Clique nos ÍCONES DA ÁREA DE TRABALHO (DESKTOP ICON CLICKS)
+    if (just_pressed && mouse_x >= 20 && mouse_x <= 150) {
+        if (mouse_y >= 30 && mouse_y <= 100) { active_app = 0; win_open = 1; }      // Ícone Shell
+        else if (mouse_y >= 120 && mouse_y <= 190) { active_app = 1; win_open = 1; } // Ícone Memoria
+        else if (mouse_y >= 210 && mouse_y <= 280) { active_app = 2; win_open = 1; } // Ícone IDT
+        else if (mouse_y >= 300 && mouse_y <= 370) { active_app = 3; win_open = 1; } // Ícone Galeria
+    }
+
+    // 2. Clique no Botão START
     if (just_pressed && mouse_x >= 10 && mouse_x <= 90 && mouse_y >= 565 && mouse_y <= 595) {
         start_menu_open = !start_menu_open;
         return;
     }
 
-    // 2. Menu Start Pop-up
+    // 3. Clique no Menu Start Pop-up
     if (start_menu_open && just_pressed && mouse_x >= 10 && mouse_x <= 200 && mouse_y >= 390 && mouse_y <= 560) {
         if (mouse_y >= 400 && mouse_y < 435) { active_app = 0; win_open = 1; }
         else if (mouse_y >= 435 && mouse_y < 470) { active_app = 1; win_open = 1; }
@@ -120,41 +130,36 @@ void handle_mouse_events(void) {
     if (start_menu_open && just_pressed) start_menu_open = 0;
     if (!win_open) return;
 
-    // 3. Botão Fechar [X]
+    // 4. Clique no Botão Fechar [X]
     if (just_pressed && mouse_x >= (win_x + win_w - 25) && mouse_x <= (win_x + win_w - 9) &&
         mouse_y >= (win_y + 7) && mouse_y <= (win_y + 23)) {
         win_open = 0; is_dragging = 0; return;
     }
 
-    // 4. Clique nos Botões da Galeria
+    // 5. Clique nos Botões da Galeria
     if (win_open && active_app == 3 && just_pressed) {
         int btn_y1 = win_y + 390;
         int btn_y2 = win_y + 430;
 
-        // Linha 1 de Botões: Seleção de Fotos
         if (mouse_y >= btn_y1 && mouse_y <= btn_y1 + 30) {
             if (mouse_x >= win_x + 20 && mouse_x <= win_x + 130) gallery_photo = 0;
             else if (mouse_x >= win_x + 140 && mouse_x <= win_x + 230) gallery_photo = 1;
             else if (mouse_x >= win_x + 240 && mouse_x <= win_x + 350) gallery_photo = 2;
         }
 
-        // Linha 2 de Botões: Wallpaper e Salvar
         if (mouse_y >= btn_y2 && mouse_y <= btn_y2 + 30) {
             if (mouse_x >= win_x + 20 && mouse_x <= win_x + 210) {
-                // DEFINIR COMO WALLPAPER DO DESKTOP!
                 current_wallpaper = gallery_photo;
                 const char* msg = "PAISAGEM DEFINIDA COMO WALLPAPER DO DESKTOP!";
                 for (int i = 0; msg[i] != '\0'; i++) gallery_status_msg[i] = msg[i];
             } else if (mouse_x >= win_x + 225 && mouse_x <= win_x + 435) {
-                // SALVAR NO DISCO VFS
-                if (gallery_photo == 0) vfs_write_file("paisagem.art", "ARTE: POR DO SOL NAS MONTANHAS (IMPROVED)");
-                else if (gallery_photo == 1) vfs_write_file("paisagem.art", "ARTE: COSMOS E GALAXIA 3D (IMPROVED)");
-                else if (gallery_photo == 2) vfs_write_file("paisagem.art", "ARTE: CYBERPUNK NEON SYNTHWAVE (IMPROVED)");
+                if (gallery_photo == 0) vfs_write_file("paisagem.art", "ARTE: POR DO SOL NAS MONTANHAS");
+                else if (gallery_photo == 1) vfs_write_file("paisagem.art", "ARTE: COSMOS E GALAXIA 3D");
+                else if (gallery_photo == 2) vfs_write_file("paisagem.art", "ARTE: CYBERPUNK NEON SYNTHWAVE");
 
                 const char* msg = "PAISAGEM SALVA COM SUCESSO NO DISCO .IMG!";
                 for (int i = 0; msg[i] != '\0'; i++) gallery_status_msg[i] = msg[i];
             } else if (mouse_x >= win_x + 450 && mouse_x <= win_x + 610) {
-                // RESETAR WALLPAPER
                 current_wallpaper = -1;
                 const char* msg = "WALLPAPER RESETADO PARA O PADRAO ESCURO.";
                 for (int i = 0; msg[i] != '\0'; i++) gallery_status_msg[i] = msg[i];
@@ -162,7 +167,7 @@ void handle_mouse_events(void) {
         }
     }
 
-    // 5. Arrasto da Janela (Drag & Drop)
+    // 6. Arrasto da Janela (Drag & Drop)
     if (just_pressed && mouse_x >= win_x && mouse_x <= (win_x + win_w - 50) &&
         mouse_y >= win_y && mouse_y <= (win_y + 30)) {
         is_dragging = 1; drag_off_x = mouse_x - win_x; drag_off_y = mouse_y - win_y;
@@ -180,18 +185,38 @@ void handle_mouse_events(void) {
 }
 
 void render_gui(void) {
-    // 1. DESENHA O PLANO DE FUNDO (WALLPAPER DINÂMICO OU PADRÃO)
-    if (current_wallpaper == 0) {
-        gfx_draw_landscape_sunset(0, 0, 800, 600);
-    } else if (current_wallpaper == 1) {
-        gfx_draw_landscape_cosmos(0, 0, 800, 600);
-    } else if (current_wallpaper == 2) {
-        gfx_draw_landscape_synthwave(0, 0, 800, 600);
-    } else {
-        gfx_clear(COLOR_DARK_SLATE);
-    }
+    // 1. Wallpaper
+    if (current_wallpaper == 0) gfx_draw_landscape_sunset(0, 0, 800, 600);
+    else if (current_wallpaper == 1) gfx_draw_landscape_cosmos(0, 0, 800, 600);
+    else if (current_wallpaper == 2) gfx_draw_landscape_synthwave(0, 0, 800, 600);
+    else gfx_clear(COLOR_DARK_SLATE);
 
-    // 2. BARRA DE TAREFAS
+    // 2. ÍCONES DA ÁREA DE TRABALHO (DESKTOP SHORTCUTS)
+    // Ícone 1: SHELL VFS
+    gfx_draw_rect(20, 30, 120, 60, COLOR_NAVY);
+    gfx_draw_rect(25, 35, 110, 20, COLOR_BLUE);
+    gfx_draw_string("1. SHELL", 35, 41, COLOR_WHITE);
+    gfx_draw_string("DISCO VFS", 35, 68, COLOR_GREEN);
+
+    // Ícone 2: RAM HEAP
+    gfx_draw_rect(20, 120, 120, 60, COLOR_NAVY);
+    gfx_draw_rect(25, 125, 110, 20, COLOR_BLUE);
+    gfx_draw_string("2. MEMORIA", 35, 131, COLOR_WHITE);
+    gfx_draw_string("RAM HEAP", 35, 158, COLOR_GREEN);
+
+    // Ícone 3: HARDWARE
+    gfx_draw_rect(20, 210, 120, 60, COLOR_NAVY);
+    gfx_draw_rect(25, 215, 110, 20, COLOR_BLUE);
+    gfx_draw_string("3. HARDWARE", 30, 221, COLOR_WHITE);
+    gfx_draw_string("IDT & CPU", 35, 248, COLOR_GREEN);
+
+    // Ícone 4: GALERIA
+    gfx_draw_rect(20, 300, 120, 60, COLOR_NAVY);
+    gfx_draw_rect(25, 305, 110, 20, COLOR_BLUE);
+    gfx_draw_string("4. GALERIA", 35, 311, COLOR_WHITE);
+    gfx_draw_string("PINTOR", 35, 338, COLOR_GREEN);
+
+    // 3. BARRA DE TAREFAS
     gfx_draw_rect(0, 560, 800, 40, COLOR_NAVY);
     gfx_draw_rect(10, 565, 80, 30, start_menu_open ? COLOR_GREEN : COLOR_BLUE);
     gfx_draw_string("START", 30, 576, COLOR_NAVY);
@@ -202,7 +227,7 @@ void render_gui(void) {
     format_time_string(time_str, clock_brt.hour, clock_brt.minute, clock_brt.second);
     gfx_draw_string(time_str, 680, 576, COLOR_WHITE);
 
-    // 3. JANELA PRINCIPAL (SE ABERTA)
+    // 4. JANELA PRINCIPAL
     if (win_open) {
         gfx_draw_rect(win_x + 8, win_y + 8, win_w, win_h, 0x11111B);
         gfx_draw_rect(win_x, win_y, win_w, win_h, COLOR_GRAY);
@@ -241,21 +266,19 @@ void render_gui(void) {
             gfx_draw_string("DIAGNOSTICO DE INTERRUPCOES & CPU:", win_x + 30, win_y + 50, COLOR_GREEN);
             gfx_draw_rect(win_x + 30, win_y + 90, win_w - 60, 300, COLOR_NAVY);
             gfx_draw_string("STATUS DA TABELA IDT: ATIVA (256 GATES)", win_x + 50, win_y + 120, COLOR_WHITE);
-            gfx_draw_string("SISTEMA DE ARQUIVOS VFS: ATIVO NO DISCO .IMG", win_x + 50, win_y + 160, COLOR_GREEN);
+            gfx_draw_string("DRIVER DE AUDIO (PC SPEAKER): ATIVO", win_x + 50, win_y + 160, COLOR_GREEN);
         } else if (active_app == 3) {
-            // GALERIA PROCEDURAL
             gfx_draw_string("GALERIA PROCEDURAL - RENDERIZADOR DE LUZ E PIXELS:", win_x + 30, win_y + 42, COLOR_GREEN);
 
             int canvas_x = win_x + 30;
             int canvas_y = win_y + 65;
-            int canvas_w = 580;
+            int canvas_w = 520;
             int canvas_h = 310;
 
             if (gallery_photo == 0) gfx_draw_landscape_sunset(canvas_x, canvas_y, canvas_w, canvas_h);
             else if (gallery_photo == 1) gfx_draw_landscape_cosmos(canvas_x, canvas_y, canvas_w, canvas_h);
             else if (gallery_photo == 2) gfx_draw_landscape_synthwave(canvas_x, canvas_y, canvas_w, canvas_h);
 
-            // BOTÕES DE SELEÇÃO DE FOTO (LINHA 1)
             int btn_y1 = win_y + 390;
             gfx_draw_rect(win_x + 20, btn_y1, 110, 30, gallery_photo == 0 ? COLOR_BLUE : COLOR_NAVY);
             gfx_draw_string("1. POR DO SOL", win_x + 25, btn_y1 + 11, COLOR_WHITE);
@@ -266,7 +289,6 @@ void render_gui(void) {
             gfx_draw_rect(win_x + 240, btn_y1, 110, 30, gallery_photo == 2 ? COLOR_BLUE : COLOR_NAVY);
             gfx_draw_string("3. SYNTHWAVE", win_x + 245, btn_y1 + 11, COLOR_WHITE);
 
-            // BOTÕES DE WALLPAPER E SALVAR (LINHA 2)
             int btn_y2 = win_y + 430;
             gfx_draw_rect(win_x + 20, btn_y2, 190, 30, COLOR_BLUE);
             gfx_draw_string("USAR COMO WALLPAPER", win_x + 30, btn_y2 + 11, COLOR_WHITE);
@@ -274,15 +296,14 @@ void render_gui(void) {
             gfx_draw_rect(win_x + 225, btn_y2, 210, 30, COLOR_GREEN);
             gfx_draw_string("SALVAR NO DISCO VFS", win_x + 245, btn_y2 + 11, COLOR_NAVY);
 
-            gfx_draw_rect(win_x + 450, btn_y2, 160, 30, COLOR_RED);
-            gfx_draw_string("RESET WALLPAPER", win_x + 465, btn_y2 + 11, COLOR_WHITE);
+            gfx_draw_rect(win_x + 450, btn_y2, 110, 30, COLOR_RED);
+            gfx_draw_string("RESET WALL", win_x + 455, btn_y2 + 11, COLOR_WHITE);
 
-            // STATUS
             gfx_draw_string(gallery_status_msg, win_x + 30, win_y + 475, COLOR_WHITE);
         }
     }
 
-    // 4. MENU START POP-UP
+    // 5. MENU START POP-UP
     if (start_menu_open) {
         gfx_draw_rect(10, 390, 190, 170, COLOR_NAVY);
         gfx_draw_rect(10, 390, 190, 25, COLOR_BLUE);
@@ -294,19 +315,22 @@ void render_gui(void) {
         gfx_draw_string("> 4. GALERIA (PINTOR)", 20, 530, active_app == 3 ? COLOR_GREEN : COLOR_WHITE);
     }
 
-    // 5. PONTEIRO DO MOUSE
+    // 6. MOUSE
     gfx_draw_cursor(mouse_x, mouse_y);
     gfx_swap_buffers();
 }
 
 void kernel_main(multiboot_info_t* mbi) {
     serial_init();
-    serial_write("[LOG SERIAL] INICIALIZANDO KERNEL BARE-METAL v0.9\n");
+    serial_write("[LOG SERIAL] INICIALIZANDO KERNEL BARE-METAL v1.0\n");
 
     memory_init(mbi);
     gfx_init(mbi);
     idt_init();
     vfs_init();
+
+    // TOCA O SOM DE STARTUP RETRO AO LIGAR O SO!
+    sound_startup();
 
     input_buffer[0] = '\0';
 
