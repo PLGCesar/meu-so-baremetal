@@ -6,13 +6,15 @@
 #include "multiboot.h"
 
 typedef struct block_header {
-    size_t size;                // Tamanho do bloco de dados
-    int is_free;                // 1 = Livre, 0 = Ocupado
-    struct block_header* next;  // Próximo bloco no Heap
+    size_t size;
+    int is_free;
+    struct block_header* next;
 } block_header_t;
 
 void memory_init(multiboot_info_t* mbi);
 void* kmalloc(size_t size);
+void* kcalloc(size_t num, size_t size);
+void* krealloc(void* ptr, size_t new_size);
 void kfree(void* ptr);
 
 size_t memory_get_total_allocated(void);
