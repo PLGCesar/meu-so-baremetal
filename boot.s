@@ -100,7 +100,6 @@ load_idt:
     sti
     ret
 
-/* ENTRADA DA SYSCALL EM ASSEMBLY 64-BITS */
 .global syscall_entry
 .extern sys_handler
 syscall_entry:
@@ -208,6 +207,8 @@ irq12_stub:
 .global disk_end
 .global foto_bmp_start
 .global foto_bmp_end
+.global bgif_anim_start
+.global bgif_anim_end
 
 disk_start:
     .incbin "disk.img"
@@ -216,3 +217,7 @@ disk_end:
 foto_bmp_start:
     .incbin "foto.bmp"
 foto_bmp_end:
+
+bgif_anim_start:
+    .incbin "animacao.bgif"
+bgif_anim_end:

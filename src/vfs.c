@@ -4,17 +4,18 @@
 #include "../include/util.h"
 
 extern uint8_t foto_bmp_start[];
+extern uint8_t bgif_anim_start[];
+extern uint8_t bgif_anim_end[];
 
 void vfs_init(void) {
     fat32_init();
-    serial_write("[VFS] VFS Conectado com Suporte a Sintaxe Customizada #|!\n");
+    serial_write("[VFS] VFS Conectado com Suporte a .BMP-GIF!\n");
 }
 
 void vfs_list(char* out_buf, size_t max_len) {
     fat32_list_files(out_buf, max_len);
 }
 
-// FORMATADOR DA NOVA SINTAXE CUSTOMIZADA #|ROOT*ARQUIVO
 void vfs_list_custom_format(char* out_buf, size_t max_len) {
     char raw_list[128];
     fat32_list_files(raw_list, 128);
@@ -39,10 +40,14 @@ void vfs_list_custom_format(char* out_buf, size_t max_len) {
 }
 
 const uint8_t* vfs_read(const char* filename, size_t* out_size) {
-    // Trata se o usuario passar o caminho na sintaxe customizada #|ROOT*ARQUIVO
     const char* clean_name = filename;
     if (kstrncmp(filename, "#|ROOT*", 7) == 0) {
         clean_name = filename + 7;
+    }
+
+    if (kstrcmp(clean_name, "animacao.bgif") == 0) {
+        *out_size = (size_t)(bgif_anim_end - bgif_anim_start);
+        return bgif_anim_start;
     }
 
     if (clean_name[0] == 'f' && clean_name[1] == 'o' && clean_name[2] == 't') {
