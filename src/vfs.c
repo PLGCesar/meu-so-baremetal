@@ -1,26 +1,61 @@
 #include "../include/vfs.h"
 #include "../include/fat32.h"
 #include "../include/serial.h"
+#include "../include/util.h"
 
 extern uint8_t foto_bmp_start[];
 
 void vfs_init(void) {
     fat32_init();
-    serial_write("[VFS] VFS Conectado ao Driver de Disco FAT32!\n");
+    serial_write("[VFS] VFS Conectado com Suporte a Sintaxe Customizada #|!\n");
 }
 
 void vfs_list(char* out_buf, size_t max_len) {
     fat32_list_files(out_buf, max_len);
 }
 
+// FORMATADOR DA NOVA SINTAXE CUSTOMIZADA #|ROOT*ARQUIVO
+void vfs_list_custom_format(char* out_buf, size_t max_len) {
+    char raw_list[128];
+    fat32_list_files(raw_list, 128);
+
+    out_buf[0] = '\0';
+    size_t pos = 0;
+
+    const char* prefix = "#|ROOT*";
+    for (int k = 0; prefix[k] != '\0'; k++) out_buf[pos++] = prefix[k];
+
+    for (size_t i = 0; raw_list[i] != '\0' && pos < max_len - 10; i++) {
+        if (raw_list[i] == ' ' && raw_list[i+1] == ' ') {
+            out_buf[pos++] = ' ';
+            out_buf[pos++] = '\n';
+            for (int k = 0; prefix[k] != '\0'; k++) out_buf[pos++] = prefix[k];
+            i++;
+        } else {
+            out_buf[pos++] = raw_list[i];
+        }
+    }
+    out_buf[pos] = '\0';
+}
+
 const uint8_t* vfs_read(const char* filename, size_t* out_size) {
-    if (filename[0] == 'f' && filename[1] == 'o' && filename[2] == 't') {
+    // Trata se o usuario passar o caminho na sintaxe customizada #|ROOT*ARQUIVO
+    const char* clean_name = filename;
+    if (kstrncmp(filename, "#|ROOT*", 7) == 0) {
+        clean_name = filename + 7;
+    }
+
+    if (clean_name[0] == 'f' && clean_name[1] == 'o' && clean_name[2] == 't') {
         *out_size = 30000;
         return foto_bmp_start;
     }
-    return fat32_read_file(filename, out_size);
+    return fat32_read_file(clean_name, out_size);
 }
 
 int vfs_write_file(const char* filename, const uint8_t* content, size_t size) {
-    return fat32_write_file(filename, content, size);
+    const char* clean_name = filename;
+    if (kstrncmp(filename, "#|ROOT*", 7) == 0) {
+        clean_name = filename + 7;
+    }
+    return fat32_write_file(clean_name, content, size);
 }

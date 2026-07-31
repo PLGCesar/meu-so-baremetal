@@ -14,7 +14,7 @@
 .align 4096
 pml4_table: .skip 4096
 pdp_table: .skip 4096
-pd_table: .skip 16384    # 4 Tabelas de 4KB para mapear 4 Gigabytes inteiros!
+pd_table: .skip 16384
 stack_bottom: .skip 16384
 stack_top:
 
@@ -22,9 +22,9 @@ stack_top:
 gdt64:
     .quad 0
 gdt64_code:
-    .quad 0x00209A0000000000 # 64-bit Code
+    .quad 0x00209A0000000000
 gdt64_data:
-    .quad 0x0000920000000000 # 64-bit Data (Writable)
+    .quad 0x0000920000000000
 gdt64_pointer:
     .word gdt64_pointer - gdt64 - 1
     .quad gdt64
@@ -35,36 +35,32 @@ gdt64_pointer:
 .type _start, @function
 _start:
     mov $stack_top, %esp
-    mov %ebx, %edi          # Salva o Multiboot Info no RDI (Argumento C de 64 bits)
+    mov %ebx, %edi
 
-    # 1. Mapeia PML4 -> PDP
     mov $pdp_table, %eax
     or $3, %eax
     mov %eax, pml4_table
 
-    # 2. Mapeia PDP -> PD (Cria 4 entradas no PDP para cobrir 4GB)
     mov $pd_table, %eax
     or $3, %eax
-    mov %eax, pdp_table             # 0GB - 1GB
+    mov %eax, pdp_table
     add $4096, %eax
-    mov %eax, pdp_table + 8         # 1GB - 2GB
+    mov %eax, pdp_table + 8
     add $4096, %eax
-    mov %eax, pdp_table + 16        # 2GB - 3GB
+    mov %eax, pdp_table + 16
     add $4096, %eax
-    mov %eax, pdp_table + 24        # 3GB - 4GB
+    mov %eax, pdp_table + 24
 
-    # 3. Preenche as 2048 paginas de 2MB (Total = 4096 MB = 4GB de RAM mapeada!)
     mov $0, %ecx
 map_pd:
-    mov $0x200000, %eax     # Tamanho da Pagina: 2MB
+    mov $0x200000, %eax
     mul %ecx
-    or $0x83, %eax          # Present + Writable + Huge Page
+    or $0x83, %eax
     mov %eax, pd_table(,%ecx,8)
     inc %ecx
-    cmp $2048, %ecx         # Mapeia 2048 vezes
+    cmp $2048, %ecx
     jne map_pd
 
-    # Carrega as tabelas e ativa o Long Mode (64-bits)
     mov $pml4_table, %eax
     mov %eax, %cr3
 
@@ -103,6 +99,38 @@ load_idt:
     lidt (%rdi)
     sti
     ret
+
+/* ENTRADA DA SYSCALL EM ASSEMBLY 64-BITS */
+.global syscall_entry
+.extern sys_handler
+syscall_entry:
+    push %rcx
+    push %r11
+    push %r15
+    push %r14
+    push %r13
+    push %r12
+    push %r10
+    push %rbx
+    push %rbp
+
+    mov %rax, %rdi
+    mov %rsi, %rsi
+    mov %rdx, %rdx
+    mov %r10, %rcx
+
+    call sys_handler
+
+    pop %rbp
+    pop %rbx
+    pop %r10
+    pop %r12
+    pop %r13
+    pop %r14
+    pop %r15
+    pop %r11
+    pop %rcx
+    sysretq
 
 .macro PUSH_ALL
     push %rax

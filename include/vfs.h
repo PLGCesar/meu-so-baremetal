@@ -1,10 +1,11 @@
 #ifndef VFS_H
 #define VFS_H
+
 #include <stdint.h>
 #include <stddef.h>
 
 #define MAX_FILES 8
-#define SECTORS_PER_FILE 200 // 100 KB por arquivo!
+#define SECTORS_PER_FILE 200
 
 typedef struct __attribute__((packed)) {
     char name[32];
@@ -16,6 +17,8 @@ typedef struct __attribute__((packed)) {
 
 void vfs_init(void);
 void vfs_list(char* out_buf, size_t max_len);
+void vfs_list_custom_format(char* out_buf, size_t max_len); // Formata no estilo #|ROOT*ARQUIVO
 const uint8_t* vfs_read(const char* filename, size_t* out_size);
 int vfs_write_file(const char* filename, const uint8_t* content, size_t size);
+
 #endif
