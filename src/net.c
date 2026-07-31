@@ -3,9 +3,11 @@
 #include "../include/util.h"
 #include "../include/memory.h"
 
+#define MAKE_IP(a, b, c, d) ((uint32_t)(a) | ((uint32_t)(b) << 8) | ((uint32_t)(c) << 16) | ((uint32_t)(d) << 24))
+
 static uint16_t io_base = 0;
 static uint8_t mac_addr[6];
-static uint32_t my_ip = 0x0F02000A; // IP OFICIAL DO QEMU SLIRP NAT: 10.0.2.15
+static uint32_t my_ip = MAKE_IP(10, 0, 2, 15); // IP do QEMU SLIRP Network: 10.0.2.15
 static uint8_t* rx_buffer = NULL;
 static uint32_t rx_offset = 0;
 static uint32_t rx_count = 0;
@@ -14,7 +16,7 @@ static uint32_t tx_count = 0;
 static inline uint8_t inb(uint16_t port) { uint8_t ret; asm volatile ("inb %1, %0" : "=a"(ret) : "Nd"(port)); return ret; }
 static inline void outb(uint16_t port, uint8_t val) { asm volatile ("outb %0, %1" : : "a"(val), "Nd"(port)); }
 static inline uint16_t inw(uint16_t port) { uint16_t ret; asm volatile ("inw %1, %0" : "=a"(ret) : "Nd"(port)); return ret; }
-static inline void outw(uint16_t port, uint16_t val) { asm volatile ("outw %0, %1" : : "a"(val), "Nd"(port)); }
+static inline void outw(uint16_t port, uint8_t val) { asm volatile ("outw %0, %1" : : "a"(val), "Nd"(port)); }
 static inline uint32_t inl(uint16_t port) { uint32_t ret; asm volatile ("inl %1, %0" : "=a"(ret) : "Nd"(port)); return ret; }
 static inline void outl(uint16_t port, uint32_t val) { asm volatile ("outl %0, %1" : : "a"(val), "Nd"(port)); }
 
@@ -63,22 +65,18 @@ void net_init(void) {
         if ((id & 0xFFFF) == 0x10EC && ((id >> 16) & 0xFFFF) == 0x8139) {
             uint32_t bar0 = pci_read_config(0, slot, 0, 0x10);
             io_base = (uint16_t)(bar0 & ~0x3);
-            serial_write("[NET] Placa de Rede Realtek RTL8139 Encontrada no Barramento PCI!\n");
+            serial_write("[NET] Placa Realtek RTL8139 Encontrada no PCI!\n");
             break;
         }
     }
 
-    if (!io_base) {
-        io_base = 0xC000;
-    }
+    if (!io_base) io_base = 0xC000;
 
     outb(io_base + 0x52, 0x00);
     outb(io_base + 0x37, 0x10);
     while ((inb(io_base + 0x37) & 0x10) != 0);
 
-    for (int i = 0; i < 6; i++) {
-        mac_addr[i] = inb(io_base + i);
-    }
+    for (int i = 0; i < 6; i++) mac_addr[i] = inb(io_base + i);
 
     rx_buffer = kmalloc(8192 + 16 + 1500);
     outl(io_base + 0x30, (uint32_t)(uintptr_t)rx_buffer);
@@ -87,7 +85,7 @@ void net_init(void) {
     outl(io_base + 0x44, 0x0F);
     outb(io_base + 0x37, 0x0C);
 
-    serial_write("[NET] Placa RTL8139 Inicializada com IP 10.0.2.15!\n");
+    serial_write("[NET] RTL8139 Inicializada no IP 10.0.2.15 (QEMU Net)!\n");
 }
 
 void net_poll(void) {
@@ -123,12 +121,12 @@ void net_poll(void) {
                 net_send_packet(reply, sizeof(ethernet_header_t) + sizeof(arp_packet_t));
                 serial_write("[NET] Resposta ARP Reply Enviada!\n");
             }
-        } else if (eth_type == 0x0800) { // IPv4 / ICMP PING
+        } else if (eth_type == 0x0800) { // IPv4
             ipv4_header_t* ip = (ipv4_header_t*)(pkt + 4 + sizeof(ethernet_header_t));
             if (ip->protocol == 1 && ip->dest_ip == my_ip) {
                 icmp_header_t* icmp = (icmp_header_t*)(pkt + 4 + sizeof(ethernet_header_t) + sizeof(ipv4_header_t));
-                if (icmp->type == 8) {
-                    serial_write("[NET] PING RECEBIDO! ENVIANDO ECHO REPLY...\n");
+                if (icmp->type == 8) { // PING ECHO REQUEST
+                    serial_write("[NET] PING RECEBIDO DO QEMU! ENVIANDO PING ECHO REPLY...\n");
 
                     uint8_t reply[128];
                     kmemcpy(reply, pkt + 4, 98);
@@ -145,7 +143,7 @@ void net_poll(void) {
                     r_ip->checksum = 0;
                     r_ip->checksum = ip_checksum(r_ip, sizeof(ipv4_header_t));
 
-                    r_icmp->type = 0;
+                    r_icmp->type = 0; // Echo Reply
                     r_icmp->checksum = 0;
                     r_icmp->checksum = ip_checksum(r_icmp, 64);
 
