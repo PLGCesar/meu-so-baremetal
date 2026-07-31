@@ -7,18 +7,41 @@
 
 static uint16_t io_base = 0;
 static uint8_t mac_addr[6];
-static uint32_t my_ip = MAKE_IP(10, 0, 2, 15); // IP do QEMU SLIRP Network: 10.0.2.15
+static uint32_t my_ip = MAKE_IP(10, 0, 2, 15);
 static uint8_t* rx_buffer = NULL;
 static uint32_t rx_offset = 0;
 static uint32_t rx_count = 0;
 static uint32_t tx_count = 0;
 
-static inline uint8_t inb(uint16_t port) { uint8_t ret; asm volatile ("inb %1, %0" : "=a"(ret) : "Nd"(port)); return ret; }
-static inline void outb(uint16_t port, uint8_t val) { asm volatile ("outb %0, %1" : : "a"(val), "Nd"(port)); }
-static inline uint16_t inw(uint16_t port) { uint16_t ret; asm volatile ("inw %1, %0" : "=a"(ret) : "Nd"(port)); return ret; }
-static inline void outw(uint16_t port, uint8_t val) { asm volatile ("outw %0, %1" : : "a"(val), "Nd"(port)); }
-static inline uint32_t inl(uint16_t port) { uint32_t ret; asm volatile ("inl %1, %0" : "=a"(ret) : "Nd"(port)); return ret; }
-static inline void outl(uint16_t port, uint32_t val) { asm volatile ("outl %0, %1" : : "a"(val), "Nd"(port)); }
+static inline uint8_t inb(uint16_t port) {
+    uint8_t ret;
+    asm volatile ("inb %1, %0" : "=a"(ret) : "Nd"(port));
+    return ret;
+}
+
+static inline void outb(uint16_t port, uint8_t val) {
+    asm volatile ("outb %b0, %1" : : "a"(val), "Nd"(port));
+}
+
+static inline uint16_t inw(uint16_t port) {
+    uint16_t ret;
+    asm volatile ("inw %1, %w0" : "=a"(ret) : "Nd"(port));
+    return ret;
+}
+
+static inline void outw(uint16_t port, uint16_t val) {
+    asm volatile ("outw %w0, %1" : : "a"(val), "Nd"(port));
+}
+
+static inline uint32_t inl(uint16_t port) {
+    uint32_t ret;
+    asm volatile ("inl %1, %k0" : "=a"(ret) : "Nd"(port));
+    return ret;
+}
+
+static inline void outl(uint16_t port, uint32_t val) {
+    asm volatile ("outl %k0, %1" : : "a"(val), "Nd"(port));
+}
 
 static uint32_t pci_read_config(uint8_t bus, uint8_t slot, uint8_t func, uint8_t offset) {
     uint32_t address = (uint32_t)((bus << 16) | (slot << 11) | (func << 8) | (offset & 0xfc) | 0x80000000);
@@ -98,7 +121,7 @@ void net_poll(void) {
         rx_count++;
         uint16_t eth_type = __builtin_bswap16(eth->type);
 
-        if (eth_type == 0x0806) { // ARP
+        if (eth_type == 0x0806) {
             arp_packet_t* arp = (arp_packet_t*)(pkt + 4 + sizeof(ethernet_header_t));
             if (__builtin_bswap16(arp->opcode) == 1 && arp->dest_ip == my_ip) {
                 uint8_t reply[64];
@@ -121,11 +144,11 @@ void net_poll(void) {
                 net_send_packet(reply, sizeof(ethernet_header_t) + sizeof(arp_packet_t));
                 serial_write("[NET] Resposta ARP Reply Enviada!\n");
             }
-        } else if (eth_type == 0x0800) { // IPv4
+        } else if (eth_type == 0x0800) {
             ipv4_header_t* ip = (ipv4_header_t*)(pkt + 4 + sizeof(ethernet_header_t));
             if (ip->protocol == 1 && ip->dest_ip == my_ip) {
                 icmp_header_t* icmp = (icmp_header_t*)(pkt + 4 + sizeof(ethernet_header_t) + sizeof(ipv4_header_t));
-                if (icmp->type == 8) { // PING ECHO REQUEST
+                if (icmp->type == 8) {
                     serial_write("[NET] PING RECEBIDO DO QEMU! ENVIANDO PING ECHO REPLY...\n");
 
                     uint8_t reply[128];
@@ -143,7 +166,7 @@ void net_poll(void) {
                     r_ip->checksum = 0;
                     r_ip->checksum = ip_checksum(r_ip, sizeof(ipv4_header_t));
 
-                    r_icmp->type = 0; // Echo Reply
+                    r_icmp->type = 0;
                     r_icmp->checksum = 0;
                     r_icmp->checksum = ip_checksum(r_icmp, 64);
 
