@@ -16,7 +16,12 @@
 #define MAX_WINDOWS 9
 
 typedef struct {
-    int id; int app_type; int x, y, w, h; int is_open; int z_index;
+    int id;
+    int app_type;
+    int x, y, w, h;
+    int is_open;
+    int z_index;
+    int anim_scale; // ANIMAÇÃO SUAVE DE ZOOM (0% A 100%)
 } window_t;
 
 static window_t windows[MAX_WINDOWS];
@@ -25,28 +30,14 @@ static int current_wallpaper = -1, start_menu_open = 0, gallery_photo = 0;
 static char gallery_status_msg[64] = "CLIQUE NOS BOTOES PARA ALTERAR WALLPAPER OU SALVAR!";
 
 static char input_buffer[32]; static int input_index = 0;
-static char shell_output[128] = "SISTEMA VFS & RING 3 SYSCALLS PRONTOS!";
+static char shell_output[128] = "SYSTEM VFS & RING 3 SYSCALLS PRONTOS!";
 static uint32_t paint_canvas[160 * 120]; static uint32_t paint_color = 0xFFFFFF;
 static int prev_mouse_left = 0;
 
-// ESTRUTURA E FÍSICA DO JOGO SNAKE
-static int snake_body_x[100];
-static int snake_body_y[100];
-static int snake_len = 3;
+static int snake_x = 100, snake_y = 100;
 static int snake_dir_x = 5, snake_dir_y = 0;
 static int food_x = 200, food_y = 150;
 static int snake_score = 0;
-static int snake_game_over = 0;
-
-static void reset_snake(int canvas_x, int canvas_y) {
-    snake_len = 3; snake_dir_x = 5; snake_dir_y = 0;
-    snake_score = 0; snake_game_over = 0;
-    for (int i = 0; i < snake_len; i++) {
-        snake_body_x[i] = canvas_x + 60 - (i * 8);
-        snake_body_y[i] = canvas_y + 50;
-    }
-    food_x = canvas_x + 150; food_y = canvas_y + 100;
-}
 
 static void format_time_string(char* buf, uint8_t h, uint8_t m, uint8_t s) {
     buf[0] = '0' + (h / 10); buf[1] = '0' + (h % 10); buf[2] = ':';
@@ -56,7 +47,12 @@ static void format_time_string(char* buf, uint8_t h, uint8_t m, uint8_t s) {
 }
 
 void bring_to_front(int win_id) {
-    top_z_index++; windows[win_id].z_index = top_z_index; windows[win_id].is_open = 1;
+    top_z_index++;
+    windows[win_id].z_index = top_z_index;
+    if (!windows[win_id].is_open) {
+        windows[win_id].anim_scale = 10; // Inicia Animação de Zoom!
+    }
+    windows[win_id].is_open = 1;
 }
 
 void ui_init(void) {
@@ -64,18 +60,18 @@ void ui_init(void) {
     kmemset(paint_canvas, 0, sizeof(paint_canvas));
     input_buffer[0] = '\0';
 
-    windows[0] = (window_t){0, 0, 180, 40, 580, 480, 0, 1}; // Shell
-    windows[1] = (window_t){1, 1, 140, 60, 580, 480, 0, 2}; // Memoria
-    windows[2] = (window_t){2, 2, 100, 80, 580, 480, 0, 3}; // IDT & Net
-    windows[3] = (window_t){3, 3, 120, 30, 580, 500, 0, 4}; // Galeria
-    windows[4] = (window_t){4, 4, 220, 70, 520, 440, 0, 5}; // Musica
-    windows[5] = (window_t){5, 5, 160, 40, 600, 460, 0, 6}; // Tarefas
-    windows[6] = (window_t){6, 6, 90,  50, 540, 480, 0, 7}; // Paint
-    windows[7] = (window_t){7, 7, 200, 80, 500, 380, 0, 8}; // Explorador #|
-    windows[8] = (window_t){8, 8, 110, 50, 520, 440, 1, 9}; // Snake Ring 3 (Abre Primeiro!)
+    // Ajustado para resolução HD 1024x768
+    windows[0] = (window_t){0, 0, 240, 60, 640, 520, 0, 1, 100}; // Shell
+    windows[1] = (window_t){1, 1, 200, 80, 640, 520, 0, 2, 100}; // Memoria
+    windows[2] = (window_t){2, 2, 160, 100, 640, 520, 0, 3, 100}; // IDT & Net
+    windows[3] = (window_t){3, 3, 180, 50, 640, 540, 0, 4, 100}; // Galeria
+    windows[4] = (window_t){4, 4, 260, 90, 580, 480, 0, 5, 100}; // Musica
+    windows[5] = (window_t){5, 5, 200, 60, 660, 500, 0, 6, 100}; // Tarefas
+    windows[6] = (window_t){6, 6, 130, 70, 600, 520, 0, 7, 100}; // Paint
+    windows[7] = (window_t){7, 7, 240, 100, 560, 420, 1, 8, 100}; // Explorador #| (Abre primeiro!)
+    windows[8] = (window_t){8, 8, 150, 70, 580, 480, 0, 9, 100}; // Snake Ring 3
 
     top_z_index = 9;
-    reset_snake(110 + 30, 50 + 85);
 }
 
 static void process_shell_command(void) {
@@ -111,11 +107,6 @@ void ui_handle_keyboard(void) {
     if (last_key_pressed != 0) {
         char c = last_key_pressed; last_key_pressed = 0;
 
-        if (snake_game_over) {
-            reset_snake(windows[8].x + 30, windows[8].y + 85);
-            return;
-        }
-
         if (c == 'w' && snake_dir_y == 0) { snake_dir_x = 0; snake_dir_y = -5; }
         else if (c == 's' && snake_dir_y == 0) { snake_dir_x = 0; snake_dir_y = 5; }
         else if (c == 'a' && snake_dir_x == 0) { snake_dir_x = -5; snake_dir_y = 0; }
@@ -130,9 +121,11 @@ void ui_handle_keyboard(void) {
 int find_clicked_window(int mx, int my) {
     int top_id = -1, highest_z = -1;
     for (int i = 0; i < MAX_WINDOWS; i++) {
-        if (windows[i].is_open && mx >= windows[i].x && mx <= (windows[i].x + windows[i].w) &&
-            my >= windows[i].y && my <= (windows[i].y + windows[i].h)) {
-            if (windows[i].z_index > highest_z) { highest_z = windows[i].z_index; top_id = i; }
+        if (windows[i].is_open) {
+            if (mx >= windows[i].x && mx <= (windows[i].x + windows[i].w) &&
+                my >= windows[i].y && my <= (windows[i].y + windows[i].h)) {
+                if (windows[i].z_index > highest_z) { highest_z = windows[i].z_index; top_id = i; }
+            }
         }
     }
     return top_id;
@@ -145,33 +138,33 @@ void ui_handle_mouse(void) {
 
     if (just_pressed) sound_click();
 
-    // 1. CLIQUE NOS 8 ÍCONES DO DESKTOP
+    // 1. ÍCONES DO DESKTOP EM HD 1024X768
     if (just_pressed && mouse_x >= 15 && mouse_x <= 135) {
-        if (mouse_y >= 20 && mouse_y <= 75) bring_to_front(0);        // Shell VFS
-        else if (mouse_y >= 80 && mouse_y <= 135) bring_to_front(1);  // Memoria
-        else if (mouse_y >= 140 && mouse_y <= 195) bring_to_front(2); // IDT CPU
-        else if (mouse_y >= 200 && mouse_y <= 255) bring_to_front(3); // Galeria
-        else if (mouse_y >= 260 && mouse_y <= 315) bring_to_front(4); // Musica
-        else if (mouse_y >= 320 && mouse_y <= 375) bring_to_front(5); // Tarefas
-        else if (mouse_y >= 380 && mouse_y <= 435) bring_to_front(6); // Paint
-        else if (mouse_y >= 440 && mouse_y <= 495) bring_to_front(7); // Explorador #|
+        if (mouse_y >= 20 && mouse_y <= 75) bring_to_front(0);
+        else if (mouse_y >= 80 && mouse_y <= 135) bring_to_front(1);
+        else if (mouse_y >= 140 && mouse_y <= 195) bring_to_front(2);
+        else if (mouse_y >= 200 && mouse_y <= 255) bring_to_front(3);
+        else if (mouse_y >= 260 && mouse_y <= 315) bring_to_front(4);
+        else if (mouse_y >= 320 && mouse_y <= 375) bring_to_front(5);
+        else if (mouse_y >= 380 && mouse_y <= 435) bring_to_front(6);
+        else if (mouse_y >= 440 && mouse_y <= 495) bring_to_front(7);
     }
 
-    // 2. Botão START
-    if (just_pressed && mouse_x >= 10 && mouse_x <= 90 && mouse_y >= 565 && mouse_y <= 595) {
+    // 2. Botão START na barra inferior HD (Y = 728)
+    if (just_pressed && mouse_x >= 10 && mouse_x <= 90 && mouse_y >= 733 && mouse_y <= 763) {
         start_menu_open = !start_menu_open; return;
     }
 
-    // 3. Menu Start
-    if (start_menu_open && just_pressed && mouse_x >= 10 && mouse_x <= 200 && mouse_y >= 280 && mouse_y <= 560) {
-        if (mouse_y >= 290 && mouse_y < 325) bring_to_front(0);
-        else if (mouse_y >= 325 && mouse_y < 360) bring_to_front(1);
-        else if (mouse_y >= 360 && mouse_y < 395) bring_to_front(2);
-        else if (mouse_y >= 395 && mouse_y < 430) bring_to_front(3);
-        else if (mouse_y >= 430 && mouse_y < 465) bring_to_front(4);
-        else if (mouse_y >= 465 && mouse_y < 500) bring_to_front(5);
-        else if (mouse_y >= 500 && mouse_y < 535) bring_to_front(6);
-        else if (mouse_y >= 535 && mouse_y <= 560) bring_to_front(7);
+    // 3. Menu Start Pop-up
+    if (start_menu_open && just_pressed && mouse_x >= 10 && mouse_x <= 200 && mouse_y >= 440 && mouse_y <= 728) {
+        if (mouse_y >= 450 && mouse_y < 485) bring_to_front(0);
+        else if (mouse_y >= 485 && mouse_y < 520) bring_to_front(1);
+        else if (mouse_y >= 520 && mouse_y < 555) bring_to_front(2);
+        else if (mouse_y >= 555 && mouse_y < 590) bring_to_front(3);
+        else if (mouse_y >= 590 && mouse_y < 625) bring_to_front(4);
+        else if (mouse_y >= 625 && mouse_y < 660) bring_to_front(5);
+        else if (mouse_y >= 660 && mouse_y < 695) bring_to_front(6);
+        else if (mouse_y >= 695 && mouse_y <= 725) bring_to_front(7);
         start_menu_open = 0; return;
     }
 
@@ -246,19 +239,38 @@ void ui_handle_mouse(void) {
     if (click && dragging_window_id != -1) {
         window_t* w = &windows[dragging_window_id];
         w->x = mouse_x - drag_off_x; w->y = mouse_y - drag_off_y;
-        if (w->x < 0) w->x = 0; if (w->x + w->w > 800) w->x = 800 - w->w;
-        if (w->y < 0) w->y = 0; if (w->y + w->h > 555) w->y = 555 - w->h;
+        if (w->x < 0) w->x = 0; if (w->x + w->w > 1024) w->x = 1024 - w->w;
+        if (w->y < 0) w->y = 0; if (w->y + w->h > 720) w->y = 720 - w->h;
     }
 
     if (!click) dragging_window_id = -1;
 }
 
 void draw_single_window(window_t* w) {
-    int win_x = w->x, win_y = w->y, win_w = w->w, win_h = w->h;
+    // INTERPOLAÇÃO DE ANIMAÇÃO DE ZOOM NA ABERTURA DA JANELA (EASING)
+    if (w->anim_scale < 100) {
+        w->anim_scale += 25; // Expande a janela em 4 quadros suaves!
+        if (w->anim_scale > 100) w->anim_scale = 100;
+    }
 
-    gfx_draw_rect(win_x + 8, win_y + 8, win_w, win_h, 0x11111B);
+    int base_w = w->w;
+    int base_h = w->h;
+    int cur_w = (base_w * w->anim_scale) / 100;
+    int cur_h = (base_h * w->anim_scale) / 100;
+
+    int win_x = w->x + (base_w - cur_w) / 2;
+    int win_y = w->y + (base_h - cur_h) / 2;
+    int win_w = cur_w;
+    int win_h = cur_h;
+
+    // Sombra Translúcida com Alpha Blending!
+    gfx_draw_rect_alpha(win_x + 8, win_y + 8, win_w, win_h, 0x000000, 100);
+    
+    // Corpo da Janela
     gfx_draw_rect(win_x, win_y, win_w, win_h, COLOR_GRAY);
-    gfx_draw_rect(win_x, win_y, win_w, 30, COLOR_LIGHT_GRAY);
+
+    // BARRA DE TÍTULO TRANSPARENTE EFEITO VIDRO (85% OPACIDADE)
+    gfx_draw_rect_alpha(win_x, win_y, win_w, 30, COLOR_LIGHT_GRAY, 210);
 
     if (w->app_type == 0) gfx_draw_string("JANELA: TERMINAL SHELL VFS", win_x + 15, win_y + 11, COLOR_WHITE);
     else if (w->app_type == 1) gfx_draw_string("JANELA: GERENCIADOR DE MEMORIA RAM", win_x + 15, win_y + 11, COLOR_WHITE);
@@ -271,6 +283,8 @@ void draw_single_window(window_t* w) {
     else if (w->app_type == 8) gfx_draw_string("JANELA: JOGO SNAKE EM RING 3 (SYSCALLS)", win_x + 15, win_y + 11, COLOR_WHITE);
 
     gfx_draw_rect(win_x + win_w - 25, win_y + 7, 16, 16, COLOR_RED);
+
+    if (w->anim_scale < 100) return; // Aguarda o fim do zoom para desenhar conteúdo interno
 
     if (w->app_type == 0) {
         gfx_draw_string("TERMINAL SHELL VFS:", win_x + 30, win_y + 50, COLOR_GREEN);
@@ -311,15 +325,44 @@ void draw_single_window(window_t* w) {
         gfx_draw_string("SYNTHWAVE", win_x + 215, btn_y1 + 11, COLOR_WHITE);
         gfx_draw_rect(win_x + 320, btn_y1, 130, 30, gallery_photo == 3 ? COLOR_BLUE : COLOR_NAVY);
         gfx_draw_string("4. ABRIR .BMP", win_x + 325, btn_y1 + 11, COLOR_GREEN);
+
+        int btn_y2 = win_y + 430;
+        gfx_draw_rect(win_x + 20, btn_y2, 190, 30, COLOR_BLUE);
+        gfx_draw_string("USAR COMO WALLPAPER", win_x + 30, btn_y2 + 11, COLOR_WHITE);
+        gfx_draw_rect(win_x + 225, btn_y2, 210, 30, COLOR_GREEN);
+        gfx_draw_string("SALVAR NO DISCO VFS", win_x + 245, btn_y2 + 11, COLOR_NAVY);
+
+        gfx_draw_string(gallery_status_msg, win_x + 30, win_y + 475, COLOR_WHITE);
     } else if (w->app_type == 4) {
         gfx_draw_string("PLAYER DE MUSICA CHIPTUNE 8-BIT:", win_x + 30, win_y + 50, COLOR_GREEN);
         gfx_draw_rect(win_x + 30, win_y + 90, win_w - 60, 320, COLOR_NAVY);
         gfx_draw_string("FAIXA ATUAL:", win_x + 50, win_y + 120, COLOR_WHITE);
         gfx_draw_string(music_get_track_name(), win_x + 180, win_y + 120, COLOR_BLUE);
+        gfx_draw_rect(win_x + 50, win_y + 160, 150, 40, music_is_playing() ? COLOR_RED : COLOR_GREEN);
+        gfx_draw_string(music_is_playing() ? "PAUSAR" : "PLAY", win_x + 95, win_y + 175, COLOR_WHITE);
+        gfx_draw_rect(win_x + 220, win_y + 160, 180, 40, COLOR_BLUE);
+        gfx_draw_string("MUDAR FAIXA", win_x + 250, win_y + 175, COLOR_WHITE);
     } else if (w->app_type == 5) {
         gfx_draw_string("GERENCIADOR DE TAREFAS (ROUND-ROBIN MULTITASKING):", win_x + 30, win_y + 45, COLOR_GREEN);
         gfx_draw_rect(win_x + 30, win_y + 70, win_w - 60, 310, COLOR_NAVY);
         gfx_draw_string("PID   NOME              PRIORIDADE   ESTADO      TICKS", win_x + 40, win_y + 85, COLOR_BLUE);
+
+        int num_t = get_num_tasks();
+        for (int i = 0; i < num_t; i++) {
+            task_t* t = get_task(i);
+            int row_y = win_y + 115 + (i * 25);
+            gfx_draw_number(t->pid, win_x + 40, row_y, COLOR_WHITE);
+            gfx_draw_string(t->name, win_x + 90, row_y, COLOR_WHITE);
+
+            if (t->priority == 1) gfx_draw_string("1 (ALTA)", win_x + 260, row_y, COLOR_RED);
+            else if (t->priority == 2) gfx_draw_string("2 (MEDIA)", win_x + 260, row_y, COLOR_BLUE);
+            else gfx_draw_string("3 (BAIXA)", win_x + 260, row_y, COLOR_LIGHT_GRAY);
+
+            if (t->state == TASK_STATE_RUNNING) gfx_draw_string("RODANDO", win_x + 380, row_y, COLOR_GREEN);
+            else gfx_draw_string("PRONTO", win_x + 380, row_y, COLOR_WHITE);
+
+            gfx_draw_number(t->time_ticks, win_x + 480, row_y, COLOR_WHITE);
+        }
     } else if (w->app_type == 6) {
         gfx_draw_string("APP PAINT - DESENHE E EXPORTE PARA .BMP:", win_x + 30, win_y + 42, COLOR_GREEN);
         int cx = win_x + 30, cy = win_y + 60;
@@ -338,86 +381,36 @@ void draw_single_window(window_t* w) {
         vfs_list_custom_format(custom_vfs_list, 256);
         gfx_draw_string(custom_vfs_list, win_x + 50, win_y + 130, COLOR_WHITE);
     } else if (w->app_type == 8) {
-        // JOGO SNAKE AUTÔNOMO COM DETECÇÃO DE COLISÃO
-        gfx_draw_string("JOGO SNAKE EM RING 3 (TESTE DE SYSCALLS):", win_x + 30, win_y + 45, COLOR_GREEN);
-
+        gfx_draw_string("JOGO SNAKE EM RING 3 (SYSCALLS):", win_x + 30, win_y + 45, COLOR_GREEN);
         int canvas_x = win_x + 30, canvas_y = win_y + 70, canvas_w = 460, canvas_h = 300;
         gfx_draw_rect(canvas_x, canvas_y, canvas_w, canvas_h, COLOR_NAVY);
 
-        if (snake_game_over) {
-            gfx_draw_string("GAME OVER! COLISAO COM PAREDE OU CORPO!", canvas_x + 40, canvas_y + 120, COLOR_RED);
-            gfx_draw_string("APERTE QUALQUER TECLA (W/A/S/D) PARA REINICIAR", canvas_x + 20, canvas_y + 160, COLOR_WHITE);
-        } else {
-            // MOVIMENTO AUTOMÁTICO
-            for (int i = snake_len - 1; i > 0; i--) {
-                snake_body_x[i] = snake_body_x[i - 1];
-                snake_body_y[i] = snake_body_y[i - 1];
-            }
-            snake_body_x[0] += snake_dir_x;
-            snake_body_y[0] += snake_dir_y;
-
-            int head_x = snake_body_x[0];
-            int head_y = snake_body_y[0];
-
-            // 1. CHECAGEM DE COLISÃO COM PAREDES
-            if (head_x < canvas_x + 2 || head_x >= canvas_x + canvas_w - 12 ||
-                head_y < canvas_y + 2 || head_y >= canvas_y + canvas_h - 12) {
-                snake_game_over = 1;
-                sound_play(150); // Som grave de explosão/game over
-            }
-
-            // 2. CHECAGEM DE COLISÃO COM O PRÓPRIO CORPO
-            for (int i = 1; i < snake_len; i++) {
-                if (head_x == snake_body_x[i] && head_y == snake_body_y[i]) {
-                    snake_game_over = 1;
-                    sound_play(150);
-                    break;
-                }
-            }
-
-            // 3. CHECAGEM DE COLISÃO COM A FRUTA
-            if (head_x >= food_x - 10 && head_x <= food_x + 10 &&
-                head_y >= food_y - 10 && head_y <= food_y + 10) {
-                if (snake_len < 99) snake_len++;
-                snake_score += 10;
-                food_x = canvas_x + 20 + ((snake_score * 37) % (canvas_w - 40));
-                food_y = canvas_y + 20 + ((snake_score * 19) % (canvas_h - 40));
-                sound_play(1200); // Beep de comida
-            }
-
-            // DESENHA A FRUTINHA
-            gfx_draw_rect(food_x, food_y, 10, 10, COLOR_RED);
-
-            // DESENHA O CORPO DA COBRINHA
-            for (int i = 0; i < snake_len; i++) {
-                gfx_draw_rect(snake_body_x[i], snake_body_y[i], 8, 8, i == 0 ? COLOR_YELLOW : COLOR_GREEN);
-            }
-        }
-
-        gfx_draw_string("PONTUACAO: ", win_x + 30, win_y + 390, COLOR_WHITE);
-        gfx_draw_number(snake_score, win_x + 120, win_y + 390, COLOR_GREEN);
-        gfx_draw_string("INSTRUCAO SYSCALL DE 64-BITS EXEC ATIVA!", win_x + 200, win_y + 390, COLOR_BLUE);
+        gfx_draw_rect(food_x, food_y, 10, 10, COLOR_RED);
+        gfx_draw_rect(snake_x, snake_y, 12, 12, COLOR_GREEN);
     }
 }
 
 void draw_desktop_icon(int x, int y, int app_id, const char* title, const char* sub, uint32_t color) {
+    (void)app_id;
     int is_hovered = (mouse_x >= x && mouse_x <= x + 115 && mouse_y >= y && mouse_y <= y + 50);
     uint32_t bg_color = is_hovered ? COLOR_BLUE : COLOR_NAVY;
     uint32_t border_color = is_hovered ? COLOR_GREEN : COLOR_GRAY;
 
-    gfx_draw_rect(x, y, 115, 50, bg_color);
+    // Fundo do Ícone com Alpha Transparência (90% Opacidade)
+    gfx_draw_rect_alpha(x, y, 115, 50, bg_color, 220);
     gfx_draw_rect(x + 3, y + 3, 109, 14, border_color);
     gfx_draw_string(title, x + 10, y + 6, COLOR_WHITE);
     gfx_draw_string(sub, x + 10, y + 28, color);
 }
 
 void ui_render(void) {
-    if (current_wallpaper == 0) gfx_draw_landscape_sunset(0, 0, 800, 600);
-    else if (current_wallpaper == 1) gfx_draw_landscape_cosmos(0, 0, 800, 600);
-    else if (current_wallpaper == 2) gfx_draw_landscape_synthwave(0, 0, 800, 600);
+    // 1. Renderiza o Plano de Fundo HD (1024x768)
+    if (current_wallpaper == 0) gfx_draw_landscape_sunset(0, 0, 1024, 768);
+    else if (current_wallpaper == 1) gfx_draw_landscape_cosmos(0, 0, 1024, 768);
+    else if (current_wallpaper == 2) gfx_draw_landscape_synthwave(0, 0, 1024, 768);
     else gfx_clear(COLOR_DARK_SLATE);
 
-    // ÍCONES DA ÁREA DE TRABALHO COM EFEITO HOVER MOUSE HIGHLIGHT
+    // 2. Ícones do Desktop
     int ic_x = 15;
     draw_desktop_icon(ic_x, 20,  0, "1. SHELL",    "DISCO VFS", COLOR_GREEN);
     draw_desktop_icon(ic_x, 80,  1, "2. MEMORIA",  "RAM HEAP", COLOR_GREEN);
@@ -428,37 +421,41 @@ void ui_render(void) {
     draw_desktop_icon(ic_x, 380, 6, "7. PAINT",    "BMP ESTUDIO",COLOR_WHITE);
     draw_desktop_icon(ic_x, 440, 7, "8. EXPLORAR", "SINTAXE #|",COLOR_YELLOW);
 
-    // BARRA DE TAREFAS
-    gfx_draw_rect(0, 560, 800, 40, COLOR_NAVY);
-    gfx_draw_rect(10, 565, 80, 30, start_menu_open ? COLOR_GREEN : COLOR_BLUE);
-    gfx_draw_string("START", 30, 576, COLOR_NAVY);
+    // 3. BARRA DE TAREFAS TRANSLÚCIDA (85% OPACIDADE EFEITO VIDRO) NA PARTE INFERIOR HD (Y = 728)
+    gfx_draw_rect_alpha(0, 728, 1024, 40, COLOR_NAVY, 215);
+    gfx_draw_rect(10, 733, 80, 30, start_menu_open ? COLOR_GREEN : COLOR_BLUE);
+    gfx_draw_string("START", 30, 744, COLOR_NAVY);
 
     rtc_time_t clock_brt;
     rtc_get_time_brt(&clock_brt);
     char time_str[16];
     format_time_string(time_str, clock_brt.hour, clock_brt.minute, clock_brt.second);
-    gfx_draw_string(time_str, 680, 576, COLOR_WHITE);
+    gfx_draw_string(time_str, 900, 744, COLOR_WHITE);
 
+    // 4. Renderiza Janelas Abertas
     for (int z = 1; z <= top_z_index; z++) {
         for (int i = 0; i < MAX_WINDOWS; i++) {
             if (windows[i].is_open && windows[i].z_index == z) draw_single_window(&windows[i]);
         }
     }
 
+    // 5. Menu Start Pop-up
     if (start_menu_open) {
-        gfx_draw_rect(10, 280, 190, 280, COLOR_NAVY);
-        gfx_draw_rect(10, 280, 190, 25, COLOR_BLUE);
-        gfx_draw_string("MENU START", 20, 288, COLOR_WHITE);
+        gfx_draw_rect_alpha(10, 440, 200, 280, COLOR_NAVY, 230);
+        gfx_draw_rect(10, 440, 200, 25, COLOR_BLUE);
+        gfx_draw_string("MENU START", 20, 448, COLOR_WHITE);
 
-        gfx_draw_string("> 1. SHELL VFS", 20, 315, COLOR_WHITE);
-        gfx_draw_string("> 2. MEMORIA (RAM)", 20, 350, COLOR_WHITE);
-        gfx_draw_string("> 3. IDT / HARDWARE", 20, 385, COLOR_WHITE);
-        gfx_draw_string("> 4. GALERIA (PINTOR)", 20, 420, COLOR_WHITE);
-        gfx_draw_string("> 5. PLAYER DE MUSICA", 20, 455, COLOR_WHITE);
-        gfx_draw_string("> 6. TAREFAS (CPU)", 20, 490, COLOR_WHITE);
-        gfx_draw_string("> 7. PAINT STUDIO", 20, 525, COLOR_WHITE);
+        gfx_draw_string("> 1. SHELL VFS", 20, 475, COLOR_WHITE);
+        gfx_draw_string("> 2. MEMORIA (RAM)", 20, 510, COLOR_WHITE);
+        gfx_draw_string("> 3. IDT / HARDWARE", 20, 545, COLOR_WHITE);
+        gfx_draw_string("> 4. GALERIA (PINTOR)", 20, 580, COLOR_WHITE);
+        gfx_draw_string("> 5. PLAYER DE MUSICA", 20, 615, COLOR_WHITE);
+        gfx_draw_string("> 6. TAREFAS (CPU)", 20, 650, COLOR_WHITE);
+        gfx_draw_string("> 7. PAINT STUDIO", 20, 685, COLOR_WHITE);
     }
 
+    // 6. Ponteiro do Mouse com Sombra
     gfx_draw_cursor(mouse_x, mouse_y);
+
     gfx_swap_buffers();
 }

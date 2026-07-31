@@ -1,5 +1,6 @@
 #ifndef GFX_H
 #define GFX_H
+
 #include <stdint.h>
 #include <stddef.h>
 #include "multiboot.h"
@@ -18,8 +19,10 @@
 
 void gfx_init(multiboot_info_t* mbi);
 void gfx_put_pixel(int x, int y, uint32_t color);
+void gfx_put_pixel_alpha(int x, int y, uint32_t color, uint8_t alpha); // TRANSPARÊNCIA REAL!
 void gfx_clear(uint32_t color);
 void gfx_draw_rect(int x, int y, int width, int height, uint32_t color);
+void gfx_draw_rect_alpha(int x, int y, int width, int height, uint32_t color, uint8_t alpha);
 void gfx_draw_char(char c, int x, int y, uint32_t color);
 void gfx_draw_string(const char* str, int x, int y, uint32_t color);
 void gfx_draw_number(int num, int x, int y, uint32_t color);
@@ -29,4 +32,5 @@ void gfx_swap_buffers(void);
 void gfx_draw_landscape_sunset(int x, int y, int w, int h);
 void gfx_draw_landscape_cosmos(int x, int y, int w, int h);
 void gfx_draw_landscape_synthwave(int x, int y, int w, int h);
+
 #endif
