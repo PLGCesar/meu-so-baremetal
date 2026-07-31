@@ -10,10 +10,8 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /os
 
-# 1. Gera o animacao.bgif PRIMEIRO antes de compilar o boot.s!
 CMD dd if=/dev/zero of=disk.img bs=1k count=64 && \
     dd if=/dev/zero of=harddisk.img bs=1M count=1 && \
-    (gcc -O2 tools/gif_builder.c -o gif_builder -lm && ./gif_builder || touch animacao.bgif) && \
     gcc -m64 -c boot.s -o boot.o -fno-pie -fno-pic && \
     gcc -m64 -c src/util.c -o util.o -Iinclude -ffreestanding -mno-red-zone -fno-pie -fno-pic -O2 -Wall -Wextra && \
     gcc -m64 -c src/gfx.c -o gfx.o -Iinclude -ffreestanding -mno-red-zone -fno-pie -fno-pic -O2 -Wall -Wextra && \
