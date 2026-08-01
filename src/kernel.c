@@ -20,7 +20,7 @@ void task_music_loop(void) {
 
 void kernel_main(multiboot_info_t* mbi) {
     serial_init();
-    serial_write("[LOG SERIAL] INICIALIZANDO KERNEL BARE-METAL v1.0 (BOSS 6 & APP 10)\n");
+    serial_write("[LOG SERIAL] INICIALIZANDO KERNEL CAPIVARAOS 64-BIT v1.0 (BOSS 6 & APP 10)\n");
 
     memory_init(mbi);
     gfx_init(mbi);

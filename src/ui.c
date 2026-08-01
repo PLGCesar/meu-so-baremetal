@@ -363,7 +363,7 @@ void draw_single_window(window_t* w) {
     if (w->app_type == 0) {
         gfx_draw_string("TERMINAL SHELL VFS:", win_x + 30, win_y + 50, COLOR_GREEN);
         gfx_draw_rect(win_x + 30, win_y + 105, win_w - 60, 35, COLOR_NAVY);
-        gfx_draw_string("myos> ", win_x + 40, win_y + 118, COLOR_GREEN);
+        gfx_draw_string("capivaraos> ", win_x + 40, win_y + 118, COLOR_GREEN);
         gfx_draw_string(input_buffer, win_x + 90, win_y + 118, COLOR_WHITE);
         gfx_draw_rect(win_x + 30, win_y + 160, win_w - 60, 240, COLOR_NAVY);
         gfx_draw_string(shell_output, win_x + 50, win_y + 220, COLOR_WHITE);
