@@ -3,7 +3,7 @@
 
 static uint32_t* framebuffer = 0;
 static uint32_t* back_buffer = 0;
-static uint32_t width = 1024;  // UPGRADE PARA HD 1024X768!
+static uint32_t width = 1024;
 static uint32_t height = 768;
 static uint32_t pitch = 4096;
 
@@ -77,7 +77,6 @@ static const uint8_t font8x8_basic[128][8] = {
 
 void gfx_init(multiboot_info_t* mbi) {
     (void)mbi;
-    // Configura Bochs BGA I/O para HD 1024x768 32-bit
     outw(0x01CE, 4); outw(0x01CF, 0);
     outw(0x01CE, 1); outw(0x01CF, 1024);
     outw(0x01CE, 2); outw(0x01CF, 768);
@@ -99,32 +98,25 @@ void gfx_init(multiboot_info_t* mbi) {
     back_buffer = (uint32_t*)kmalloc(width * height * sizeof(uint32_t));
 }
 
+uint32_t gfx_get_width(void) { return width; }
+uint32_t gfx_get_height(void) { return height; }
+
 void gfx_put_pixel(int x, int y, uint32_t color) {
     if (!back_buffer) return;
     if (x < 0 || (uint32_t)x >= width || y < 0 || (uint32_t)y >= height) return;
     back_buffer[y * width + x] = color;
 }
 
-// CÁLCULO DE ALPHA BLENDING (TRANSPARÊNCIA EFEITO VIDRO)
 void gfx_put_pixel_alpha(int x, int y, uint32_t color, uint8_t alpha) {
     if (!back_buffer) return;
     if (x < 0 || (uint32_t)x >= width || y < 0 || (uint32_t)y >= height) return;
 
-    if (alpha == 255) {
-        back_buffer[y * width + x] = color;
-        return;
-    }
+    if (alpha == 255) { back_buffer[y * width + x] = color; return; }
     if (alpha == 0) return;
 
     uint32_t bg = back_buffer[y * width + x];
-
-    uint32_t r_src = (color >> 16) & 0xFF;
-    uint32_t g_src = (color >> 8) & 0xFF;
-    uint32_t b_src = color & 0xFF;
-
-    uint32_t r_bg = (bg >> 16) & 0xFF;
-    uint32_t g_bg = (bg >> 8) & 0xFF;
-    uint32_t b_bg = bg & 0xFF;
+    uint32_t r_src = (color >> 16) & 0xFF, g_src = (color >> 8) & 0xFF, b_src = color & 0xFF;
+    uint32_t r_bg = (bg >> 16) & 0xFF, g_bg = (bg >> 8) & 0xFF, b_bg = bg & 0xFF;
 
     uint32_t r = (r_src * alpha + r_bg * (255 - alpha)) / 255;
     uint32_t g = (g_src * alpha + g_bg * (255 - alpha)) / 255;
@@ -221,9 +213,7 @@ const char* cursor_sprite[16] = {
     "            "
 };
 
-// PONTEIRO DO MOUSE COM SOMBRA SUAVE (DROP SHADOW)
 void gfx_draw_cursor(int x, int y) {
-    // 1. Desenha Sombra com 35% de Opacidade
     for (int cy = 0; cy < 16; cy++) {
         for (int cx = 0; cx < 12; cx++) {
             char pixel = cursor_sprite[cy][cx];
@@ -232,7 +222,6 @@ void gfx_draw_cursor(int x, int y) {
             }
         }
     }
-    // 2. Desenha a Seta Principal
     for (int cy = 0; cy < 16; cy++) {
         for (int cx = 0; cx < 12; cx++) {
             char pixel = cursor_sprite[cy][cx];
@@ -273,14 +262,10 @@ void gfx_draw_landscape_sunset(int x, int y, int w, int h) {
                 }
                 color = (r << 16) | (g << 8) | b;
 
-                int dx = px - sun_cx;
-                int dy = py - sun_cy;
+                int dx = px - sun_cx; int dy = py - sun_cy;
                 int dist2 = dx*dx + dy*dy;
-                if (dist2 < 1200) {
-                    color = 0xFFF1E6;
-                } else if (dist2 < 2800) {
-                    color = 0xFFD166;
-                }
+                if (dist2 < 1200) color = 0xFFF1E6;
+                else if (dist2 < 2800) color = 0xFFD166;
 
                 int m2 = ((rel_x * 9) % 40) + ((rel_x * 5) % 25);
                 if (py > horizon - 35 - m2) color = 0x3A0CA3;

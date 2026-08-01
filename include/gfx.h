@@ -18,8 +18,11 @@
 #define COLOR_ORANGE     0xFAB387
 
 void gfx_init(multiboot_info_t* mbi);
+uint32_t gfx_get_width(void);
+uint32_t gfx_get_height(void);
+
 void gfx_put_pixel(int x, int y, uint32_t color);
-void gfx_put_pixel_alpha(int x, int y, uint32_t color, uint8_t alpha); // TRANSPARÊNCIA REAL!
+void gfx_put_pixel_alpha(int x, int y, uint32_t color, uint8_t alpha);
 void gfx_clear(uint32_t color);
 void gfx_draw_rect(int x, int y, int width, int height, uint32_t color);
 void gfx_draw_rect_alpha(int x, int y, int width, int height, uint32_t color, uint8_t alpha);
