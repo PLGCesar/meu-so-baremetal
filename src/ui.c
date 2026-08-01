@@ -14,7 +14,7 @@
 #include "../include/net.h"
 #include "../include/bgif.h"
 
-#define MAX_WINDOWS 11
+#define MAX_WINDOWS 12
 
 typedef struct {
     int id; int app_type; int x, y, w, h; int is_open; int z_index; int anim_scale;
@@ -42,7 +42,6 @@ static int food_x = 200, food_y = 150;
 static int video_playing = 1;
 static int video_frame = 0;
 
-// OTIMIZACAO DE EVENTOS: So redesenha se houver mudanca real!
 static int ui_needs_redraw = 1;
 
 static char calc_display[32] = "0";
@@ -89,8 +88,9 @@ void ui_init(void) {
     windows[8] = (window_t){8, 8, 150, 70,  580, 480, 0, 9, 100};
     windows[9] = (window_t){9, 9, 210, 80,  580, 500, 1, 10, 100};
     windows[10]= (window_t){10, 10, 300, 150, 200, 260, 0, 11, 100};
+    windows[11]= (window_t){11, 11, 220, 100, 600, 480, 0, 12, 100}; // NOVO APP: LOGS
 
-    top_z_index = 11;
+    top_z_index = 12;
     ui_needs_redraw = 1;
 }
 
@@ -167,6 +167,7 @@ void ui_handle_mouse(void) {
     if (just_pressed) sound_click();
     int screen_h = gfx_get_height();
 
+    // FILEIRA 1 (ESQUERDA)
     if (just_pressed && mouse_x >= 15 && mouse_x <= 135) {
         if (mouse_y >= 20 && mouse_y <= 75) bring_to_front(0);
         else if (mouse_y >= 80 && mouse_y <= 135) bring_to_front(1);
@@ -179,19 +180,21 @@ void ui_handle_mouse(void) {
         else if (mouse_y >= 500 && mouse_y <= 555) bring_to_front(9);
     }
     
+    // FILEIRA 2 (DIREITA: CALCULADORA E LOGS)
     if (just_pressed && mouse_x >= 140 && mouse_x <= 255) {
         if (mouse_y >= 20 && mouse_y <= 75) bring_to_front(10);
+        else if (mouse_y >= 80 && mouse_y <= 135) bring_to_front(11); // ICONE LOGS
     }
 
     if (just_pressed && mouse_x >= 10 && mouse_x <= 90 && mouse_y >= screen_h - 35 && mouse_y <= screen_h - 5) {
         start_menu_open = !start_menu_open; ui_needs_redraw = 1; return;
     }
 
-    if (start_menu_open && just_pressed && mouse_x >= 10 && mouse_x <= 200 && mouse_y >= screen_h - 380 && mouse_y <= screen_h - 40) {
-        for (int i = 0; i < 10; i++) {
-            int my = screen_h - 345 + (i * 30);
+    if (start_menu_open && just_pressed && mouse_x >= 10 && mouse_x <= 200 && mouse_y >= screen_h - 410 && mouse_y <= screen_h - 40) {
+        for (int i = 0; i < 11; i++) {
+            int my = screen_h - 375 + (i * 30);
             if (mouse_y >= my - 5 && mouse_y <= my + 25) {
-                int mapping[] = {0, 1, 2, 3, 4, 5, 6, 7, 9, 10};
+                int mapping[] = {0, 1, 2, 3, 4, 5, 6, 7, 9, 10, 11};
                 bring_to_front(mapping[i]);
             }
         }
@@ -369,6 +372,7 @@ void draw_single_window(window_t* w) {
     else if (w->app_type == 8) gfx_draw_string("JANELA: JOGO SNAKE EM RING 3 (SYSCALLS)", win_x + 15, win_y + 11, COLOR_WHITE);
     else if (w->app_type == 9) gfx_draw_string("JANELA: PLAYER DE VIDEO (.BMP-GIF / BGIF)", win_x + 15, win_y + 11, COLOR_WHITE);
     else if (w->app_type == 10) gfx_draw_string("JANELA: CALCULADORA BAREMETAL", win_x + 15, win_y + 11, COLOR_WHITE);
+    else if (w->app_type == 11) gfx_draw_string("JANELA: LOGS DE ATUALIZACAO & CHANGELOG", win_x + 15, win_y + 11, COLOR_WHITE);
 
     gfx_draw_rect(win_x + win_w - 25, win_y + 7, 16, 16, COLOR_RED);
 
@@ -483,6 +487,26 @@ void draw_single_window(window_t* w) {
                 gfx_draw_string(btns[row*4 + col], bx + 16, by + 11, COLOR_WHITE);
             }
         }
+    } else if (w->app_type == 11) { // ================= APP LOGS =================
+        gfx_draw_string("LOGS DE ATUALIZACAO - CAPIVARAOS v1.2:", win_x + 20, win_y + 45, COLOR_GREEN);
+        gfx_draw_rect(win_x + 20, win_y + 70, win_w - 40, 380, COLOR_NAVY);
+
+        gfx_draw_string("VERSAO ATUAL: CapivaraOS 64-bit v1.2", win_x + 35, win_y + 90, COLOR_YELLOW);
+        gfx_draw_string("DATA: Agosto / 2026", win_x + 35, win_y + 110, COLOR_WHITE);
+        gfx_draw_string("--------------------------------------------", win_x + 35, win_y + 130, COLOR_GRAY);
+
+        gfx_draw_string("[+] ADICIONADO: App LOGS / Updates e Changelog", win_x + 35, win_y + 150, COLOR_GREEN);
+        gfx_draw_string("[+] ADICIONADO: App Calculadora Baremetal", win_x + 35, win_y + 170, COLOR_GREEN);
+        gfx_draw_string("[+] ADICIONADO: klibc com Inline Assembly 64b", win_x + 35, win_y + 190, COLOR_GREEN);
+        gfx_draw_string("[+] ADICIONADO: Event-Driven UI (0% CPU Idle)", win_x + 35, win_y + 210, COLOR_GREEN);
+        gfx_draw_string("[+] ADICIONADO: Dirty Rectangles (Swap inteligente)", win_x + 35, win_y + 230, COLOR_GREEN);
+
+        gfx_draw_string("[*] OTIMIZADO: Player BGIF 50x (Ponto Fixo 16.16)", win_x + 35, win_y + 260, COLOR_BLUE);
+        gfx_draw_string("[*] OTIMIZADO: Alinhamento de Memoria 16-bytes", win_x + 35, win_y + 280, COLOR_BLUE);
+
+        gfx_draw_string("[-] REMOVIDO: Swap Obrigatorio de 3.14MB na VRAM", win_x + 35, win_y + 310, COLOR_RED);
+        gfx_draw_string("[-] REMOVIDO: Divisoes idiv no loop interno de video", win_x + 35, win_y + 330, COLOR_RED);
+        gfx_draw_string("[-] REMOVIDO: Gargalo de 100% de CPU sem atividade", win_x + 35, win_y + 350, COLOR_RED);
     }
 }
 
@@ -499,12 +523,10 @@ void draw_desktop_icon(int x, int y, int app_id, const char* title, const char* 
 }
 
 void ui_render(void) {
-    // SE O VIDEO ESTIVER RODANDO, FORÇA REDESENHO CONSTANTE
     if (video_playing || current_wallpaper == 3) {
         ui_needs_redraw = 1;
     }
 
-    // CHECAGEM DE MUDANÇA DO SEGUNDO NO RELOGIO DA BARRA
     rtc_time_t clock_brt;
     rtc_get_time_brt(&clock_brt);
     static uint8_t last_sec = 255;
@@ -513,7 +535,6 @@ void ui_render(void) {
         ui_needs_redraw = 1;
     }
 
-    // SE NADA MUDOU NA TELA, NAO GASTA RECURSO DA CPU E CANCELA SWAP!
     if (!ui_needs_redraw) return;
     ui_needs_redraw = 0;
 
@@ -550,7 +571,9 @@ void ui_render(void) {
     draw_desktop_icon(ic_x, 440, 7, "8. EXPLORAR", "SINTAXE #|",COLOR_YELLOW);
     draw_desktop_icon(ic_x, 500, 9, "9. VIDEO",    "BGIF PLAYER",COLOR_PURPLE);
     
+    // FILEIRA 2: CALCULADORA E LOGS
     draw_desktop_icon(140, 20, 10, "10. CALC", "CALCULADORA", COLOR_ORANGE);
+    draw_desktop_icon(140, 80, 11, "11. LOGS", "CHANGELOG",   COLOR_GREEN);
 
     gfx_draw_rect_alpha(0, screen_h - 40, screen_w, 40, COLOR_NAVY, 215);
     gfx_draw_rect(10, screen_h - 35, 80, 30, start_menu_open ? COLOR_GREEN : COLOR_BLUE);
@@ -567,9 +590,9 @@ void ui_render(void) {
     }
 
     if (start_menu_open) {
-        gfx_draw_rect_alpha(10, screen_h - 380, 200, 340, COLOR_NAVY, 230);
-        gfx_draw_rect(10, screen_h - 380, 200, 25, COLOR_BLUE);
-        gfx_draw_string("MENU START", 20, screen_h - 372, COLOR_WHITE);
+        gfx_draw_rect_alpha(10, screen_h - 410, 200, 370, COLOR_NAVY, 230);
+        gfx_draw_rect(10, screen_h - 410, 200, 25, COLOR_BLUE);
+        gfx_draw_string("MENU START", 20, screen_h - 402, COLOR_WHITE);
         
         const char* menu_items[] = {
             "> 1. SHELL VFS",
@@ -581,15 +604,14 @@ void ui_render(void) {
             "> 7. PAINT STUDIO",
             "> 8. EXPLORAR",
             "> 9. PLAYER BGIF",
-            "> 10. CALCULADORA"
+            "> 10. CALCULADORA",
+            "> 11. LOGS / UPDATES"
         };
-        for (int i = 0; i < 10; i++) {
-            gfx_draw_string(menu_items[i], 20, screen_h - 345 + (i * 30), COLOR_WHITE);
+        for (int i = 0; i < 11; i++) {
+            gfx_draw_string(menu_items[i], 20, screen_h - 375 + (i * 30), COLOR_WHITE);
         }
     }
 
     gfx_draw_cursor(mouse_x, mouse_y);
-    
-    // SWAP INTELIGENTE QUE COPIA SO A AREA QUE MUDOU!
     gfx_swap_buffers();
 }
