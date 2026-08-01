@@ -10,33 +10,59 @@ static size_t total_allocated = 0;
 static size_t total_free = 0;
 static size_t block_count = 0;
 
-// Otimizador de preenchimento de memória de 64-bits (move 8 bytes por ciclo de CPU)
-void kmemset64(void* dest, uint64_t val, size_t count_64) {
-    uint64_t* ptr = (uint64_t*)dest;
-    while (count_64--) {
-        *ptr++ = val;
-    }
+// SIMD SSE2: ZERA BLOCOS DE 16 BYTES USANDO REGISTRADORES XMM DE 128-BITS (PXOR)
+void kmemset128_zero(void* dest, size_t count_16) {
+    if (!dest || count_16 == 0) return;
+    __asm__ volatile (
+        "pxor %%xmm0, %%xmm0\n\t"
+        "1:\n\t"
+        "movdqu %%xmm0, (%0)\n\t"
+        "add $16, %0\n\t"
+        "dec %1\n\t"
+        "jnz 1b"
+        : "+r"(dest), "+r"(count_16)
+        :
+        : "xmm0", "memory"
+    );
 }
 
-// Otimizador de cópia de memória de 64-bits (move 8 bytes por ciclo de CPU)
+// SIMD SSE2: COPIA BLOCOS DE 16 BYTES USANDO REGISTRADORES XMM DE 128-BITS
+void kmemcpy128(void* dest, const void* src, size_t count_16) {
+    if (!dest || !src || count_16 == 0) return;
+    __asm__ volatile (
+        "1:\n\t"
+        "movdqu (%1), %%xmm0\n\t"
+        "movdqu %%xmm0, (%0)\n\t"
+        "add $16, %0\n\t"
+        "add $16, %1\n\t"
+        "dec %2\n\t"
+        "jnz 1b"
+        : "+r"(dest), "+r"(src), "+r"(count_16)
+        :
+        : "xmm0", "memory"
+    );
+}
+
+void kmemset64(void* dest, uint64_t val, size_t count_64) {
+    uint64_t* ptr = (uint64_t*)dest;
+    while (count_64--) { *ptr++ = val; }
+}
+
 void kmemcpy64(void* dest, const void* src, size_t count_64) {
     uint64_t* d = (uint64_t*)dest;
     const uint64_t* s = (const uint64_t*)src;
-    while (count_64--) {
-        *d++ = *s++;
-    }
+    while (count_64--) { *d++ = *s++; }
 }
 
 void memory_init(multiboot_info_t* mbi) {
     (void)mbi;
     uintptr_t heap_start = (uintptr_t)&_kernel_end;
     
-    // Alinhamento rigoroso de 16-bytes para a ABI de 64-bits (x86_64)
     if (heap_start % ALIGNMENT_64 != 0) {
         heap_start += ALIGNMENT_64 - (heap_start % ALIGNMENT_64);
     }
 
-    size_t heap_size = 32 * 1024 * 1024; // 32 MegaBytes de Heap inicial em 64-bits!
+    size_t heap_size = 32 * 1024 * 1024; // 32 MB de Heap Inicial
 
     heap_first = (block_header_t*)heap_start;
     heap_first->magic = MAGIC_HEADER;
@@ -45,7 +71,6 @@ void memory_init(multiboot_info_t* mbi) {
     heap_first->next = NULL;
     heap_first->prev = NULL;
 
-    // Grava o footer mágico no final do primeiro bloco
     uint64_t* footer = (uint64_t*)((uint8_t*)heap_first + sizeof(block_header_t) + heap_first->size);
     *footer = MAGIC_FOOTER;
 
@@ -53,13 +78,13 @@ void memory_init(multiboot_info_t* mbi) {
     total_allocated = 0;
     block_count = 1;
 
-    serial_write("[64-BIT MEMORY] Heap 64-bit 16-Byte Aligned Inicializado com 32MB!\n");
+    serial_write("[64-BIT MEMORY] Heap 32MB com SIMD SSE2 128-Bits Alinhado Inicializado!\n");
 }
 
 void* kmalloc(size_t size) {
     if (size == 0) return NULL;
 
-    // Alinha o tamanho para múltiplos de 16-bytes
+    // Alinha tamanho util a multiplos de 16 bytes
     if (size % ALIGNMENT_64 != 0) {
         size += ALIGNMENT_64 - (size % ALIGNMENT_64);
     }
@@ -67,14 +92,12 @@ void* kmalloc(size_t size) {
     block_header_t* curr = heap_first;
 
     while (curr) {
-        // Checagem de integridade do cabeçalho 64-bit
         if (curr->magic != MAGIC_HEADER) {
-            serial_write("[KERNEL PANIC] CORRUPCAO DE HEAP DETECTADA EM 64-BITS!\n");
+            serial_write("[KERNEL PANIC] CORRUPCAO DE HEAP DETECTADA!\n");
             return NULL;
         }
 
         if (curr->is_free && curr->size >= size) {
-            // Divisão de bloco (Splitting) se sobrar espaço suficiente
             if (curr->size >= size + sizeof(block_header_t) + sizeof(uint64_t) + 32) {
                 size_t remaining_size = curr->size - size - sizeof(block_header_t) - sizeof(uint64_t);
 
@@ -114,9 +137,16 @@ void* kcalloc(size_t num, size_t size) {
     size_t total = num * size;
     void* ptr = kmalloc(total);
     if (ptr) {
-        // Preenchimento veloz de 64-bits por quadwords (8 bytes por ciclo)
-        size_t qwords = (total + 7) / 8;
-        kmemset64(ptr, 0, qwords);
+        // OTIMIZACAO SIMD SSE2: Zera blocos de 16-bytes usando registradores XMM de 128-bits (PXOR)
+        size_t blocks_16 = total >> 4;
+        size_t remainder = total & 15;
+        if (blocks_16 > 0) {
+            kmemset128_zero(ptr, blocks_16);
+        }
+        if (remainder > 0) {
+            uint8_t* p = (uint8_t*)ptr + (blocks_16 << 4);
+            while (remainder--) *p++ = 0;
+        }
     }
     return ptr;
 }
@@ -135,8 +165,16 @@ void* krealloc(void* ptr, size_t new_size) {
 
     void* new_ptr = kmalloc(new_size);
     if (new_ptr) {
-        size_t qwords = (block->size + 7) / 8;
-        kmemcpy64(new_ptr, ptr, qwords);
+        size_t blocks_16 = block->size >> 4;
+        size_t remainder = block->size & 15;
+        if (blocks_16 > 0) {
+            kmemcpy128(new_ptr, ptr, blocks_16);
+        }
+        if (remainder > 0) {
+            uint8_t* d = (uint8_t*)new_ptr + (blocks_16 << 4);
+            const uint8_t* s = (const uint8_t*)ptr + (blocks_16 << 4);
+            while (remainder--) *d++ = *s++;
+        }
         kfree(ptr);
     }
     return new_ptr;
@@ -162,7 +200,6 @@ void kfree(void* ptr) {
     total_allocated -= block->size;
     total_free += block->size;
 
-    // FUSÃO RÁPIDA O(1) DE BLOCOS LIVRES VIZINHOS (Coalescing Lista Duplamente Encadeada)
     if (block->next && block->next->is_free) {
         block->size += sizeof(block_header_t) + sizeof(uint64_t) + block->next->size;
         block->next = block->next->next;
