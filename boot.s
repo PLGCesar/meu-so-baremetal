@@ -39,7 +39,7 @@ _start:
     mov $stack_top, %esp
     mov %ebx, %edi
 
-    /* PERMISSOES DE MEMORIA USER/SUPERVISOR NAS PAGINAS */
+    /* 1. PERMISSOES USER/SUPERVISOR NAS TABELAS DE PAGINAS */
     mov $pdp_table, %eax
     or $7, %eax
     mov %eax, pml4_table
@@ -64,27 +64,30 @@ map_pd:
     cmp $2048, %ecx
     jne map_pd
 
+    /* 2. CARREGA CR3 COM A TABELA PML4 */
     mov $pml4_table, %eax
     mov %eax, %cr3
 
-    /* ATIVA PAE (bit 5) E ATIVA SUPORTE SSE/XMM NO CR4 (bits 9 e 10) */
+    /* 3. ATIVA PAE (bit 5) E FLAGS SSE (bits 9 e 10) NO CR4 */
     mov %cr4, %eax
     or $(1<<5), %eax          /* PAE */
     or $(3<<9), %eax          /* OSFXSR (bit 9) e OSXMMEXCPT (bit 10) */
     mov %eax, %cr4
 
-    /* GARANTE QUE CR0.EM (bit 2) ESTA LIMPO E CR0.MP (bit 1) ATIVO PARA SSE */
-    mov %cr0, %eax
-    and $0xFFFFFFFB, %eax     /* Limpa EM */
-    or $0x2, %eax             /* Ativa MP */
-    or $(1<<31), %eax         /* Paging */
-    mov %eax, %cr0
-
+    /* 4. PASSO CRUCIAL: ATIVA EFER.LME (LONG MODE ENABLE, BIT 8) PRIMEIRO! */
     mov $0xC0000080, %ecx
     rdmsr
-    or $(1<<8), %eax
+    or $(1<<8), %eax          /* Set LME (bit 8) */
     wrmsr
 
+    /* 5. AGORA SIM ATIVA A PAGINACAO NO CR0 PARA ENTRAR EM LONG MODE 64-BITS (EFER.LMA = 1) */
+    mov %cr0, %eax
+    and $0xFFFFFFFB, %eax     /* Limpa EM (bit 2) */
+    or $0x2, %eax             /* Ativa MP (bit 1) */
+    or $(1<<31), %eax         /* Ativa Paging PG (bit 31) */
+    mov %eax, %cr0
+
+    /* 6. CARREGA GDT DE 64-BITS E PULA PARA O LONG MODE */
     lgdt gdt64_pointer
     jmp $0x08, $long_mode_start
 
