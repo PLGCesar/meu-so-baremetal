@@ -55,7 +55,6 @@ void pic_remap(void) {
     outb(0x21, 0xF8); outb(0xA1, 0xEF);
 }
 
-// RESTAURANDO A LÓGICA DE ESPERA DO CHIP DO MOUSE
 void mouse_wait(uint8_t type) {
     uint32_t timeout = 100000;
     if (type == 0) {
@@ -114,10 +113,12 @@ void mouse_handler_main(void) {
         case 2: mouse_byte[2] = data; mouse_cycle = 0;
             mouse_left_clicked = (mouse_byte[0] & 0x01);
             mouse_x += mouse_byte[1]; mouse_y -= mouse_byte[2];
+
+            // LIMITES CORRIGIDOS PARA NAVEGAÇÃO TOTAL EM HD 1024X768!
             if (mouse_x < 0) { mouse_x = 0; }
-            if (mouse_x >= 800) { mouse_x = 799; }
+            if (mouse_x >= 1024) { mouse_x = 1023; }
             if (mouse_y < 0) { mouse_y = 0; }
-            if (mouse_y >= 600) { mouse_y = 599; }
+            if (mouse_y >= 768) { mouse_y = 767; }
             break;
     }
     outb(0xA0, 0x20); outb(0x20, 0x20);

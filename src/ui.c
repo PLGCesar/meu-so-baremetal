@@ -23,7 +23,6 @@ typedef struct {
 static window_t windows[MAX_WINDOWS];
 static int top_z_index = 0, dragging_window_id = -1, drag_off_x = 0, drag_off_y = 0;
 
-// current_wallpaper: -1=Slate, 0=Sunset, 1=Cosmos, 2=Synthwave, 3=.BGIF ANIMADO!
 static int current_wallpaper = -1;
 static int bgif_wallpaper_frame = 0;
 
@@ -70,7 +69,7 @@ void ui_init(void) {
     windows[6] = (window_t){6, 6, 130, 70,  600, 520, 0, 7, 100};
     windows[7] = (window_t){7, 7, 240, 100, 560, 420, 0, 8, 100};
     windows[8] = (window_t){8, 8, 150, 70,  580, 480, 0, 9, 100};
-    windows[9] = (window_t){9, 9, 210, 80,  580, 500, 1, 10, 100}; // Video BGIF
+    windows[9] = (window_t){9, 9, 210, 80,  580, 500, 1, 10, 100};
 
     top_z_index = 10;
 }
@@ -141,7 +140,6 @@ void ui_handle_mouse(void) {
 
     int screen_h = gfx_get_height();
 
-    // 1. ÍCONES DO DESKTOP
     if (just_pressed && mouse_x >= 15 && mouse_x <= 135) {
         if (mouse_y >= 20 && mouse_y <= 75) bring_to_front(0);
         else if (mouse_y >= 80 && mouse_y <= 135) bring_to_front(1);
@@ -154,12 +152,10 @@ void ui_handle_mouse(void) {
         else if (mouse_y >= 500 && mouse_y <= 555) bring_to_front(9);
     }
 
-    // 2. Botão START
     if (just_pressed && mouse_x >= 10 && mouse_x <= 90 && mouse_y >= screen_h - 35 && mouse_y <= screen_h - 5) {
         start_menu_open = !start_menu_open; return;
     }
 
-    // 3. Menu Start
     if (start_menu_open && just_pressed && mouse_x >= 10 && mouse_x <= 200 && mouse_y >= screen_h - 320 && mouse_y <= screen_h - 40) {
         if (mouse_y >= screen_h - 310 && mouse_y < screen_h - 275) bring_to_front(0);
         else if (mouse_y >= screen_h - 275 && mouse_y < screen_h - 240) bring_to_front(1);
@@ -189,13 +185,10 @@ void ui_handle_mouse(void) {
                 dragging_window_id = clicked_win; drag_off_x = mouse_x - w->x; drag_off_y = mouse_y - w->y;
             }
 
-            // CONTROLES DO PLAYER DE VÍDEO BGIF (APP 9)
             if (w->app_type == 9 && mouse_y >= w->y + 400 && mouse_y <= w->y + 440) {
                 if (mouse_x >= w->x + 30 && mouse_x <= w->x + 180) video_playing = !video_playing;
                 else if (mouse_x >= w->x + 200 && mouse_x <= w->x + 360) video_frame++;
-                else if (mouse_x >= w->x + 380 && mouse_x <= w->x + 550) {
-                    current_wallpaper = 3; // ATIVA VÍDEO .BGIF COMO WALLPAPER DO DESKTOP!
-                }
+                else if (mouse_x >= w->x + 380 && mouse_x <= w->x + 550) current_wallpaper = 3;
             }
 
             if (w->app_type == 4 && mouse_y >= w->y + 160 && mouse_y <= w->y + 200) {
@@ -260,8 +253,10 @@ void ui_handle_mouse(void) {
 }
 
 void draw_single_window(window_t* w) {
+    if (!w->is_open) return; // LAZY RENDERING: Se a janela estiver fechada, nao gasta processamento!
+
     if (w->anim_scale < 100) {
-        w->anim_scale += 25; // Expande suavemente em efeito zoom!
+        w->anim_scale += 25;
         if (w->anim_scale > 100) w->anim_scale = 100;
     }
 
@@ -273,11 +268,8 @@ void draw_single_window(window_t* w) {
     int win_w = cur_w;
     int win_h = cur_h;
 
-    // Sombra Translúcida
     gfx_draw_rect_alpha(win_x + 8, win_y + 8, win_w, win_h, 0x000000, 100);
     gfx_draw_rect(win_x, win_y, win_w, win_h, COLOR_GRAY);
-
-    // Barra de Título Translúcida estilo Vidro
     gfx_draw_rect_alpha(win_x, win_y, win_w, 30, COLOR_LIGHT_GRAY, 210);
 
     if (w->app_type == 0) gfx_draw_string("JANELA: TERMINAL SHELL VFS", win_x + 15, win_y + 11, COLOR_WHITE);
@@ -307,6 +299,7 @@ void draw_single_window(window_t* w) {
         gfx_draw_rect(win_x + 30, win_y + 90, win_w - 60, 300, COLOR_NAVY);
         gfx_draw_string("RAM ALOCADA ATIVA: ", win_x + 50, win_y + 120, COLOR_WHITE);
         gfx_draw_number((int)memory_get_total_allocated(), win_x + 220, win_y + 120, COLOR_GREEN);
+        gfx_draw_string(" BYTES", win_x + 290, win_y + 120, COLOR_WHITE);
     } else if (w->app_type == 2) {
         gfx_draw_string("DIAGNOSTICO DA PLACA DE REDE REALTEK RTL8139:", win_x + 30, win_y + 45, COLOR_GREEN);
         gfx_draw_rect(win_x + 30, win_y + 70, win_w - 60, 350, COLOR_NAVY);
@@ -369,7 +362,7 @@ void draw_single_window(window_t* w) {
         gfx_draw_rect(food_x, food_y, 10, 10, COLOR_RED);
         gfx_draw_rect(snake_x, snake_y, 12, 12, COLOR_GREEN);
     } else if (w->app_type == 9) {
-        // PLAYER DE VÍDEO BGIF
+        // LAZY RENDERING DE VÍDEO: SÓ DECODIFICA SE A JANELA ESTIVER ABERTA!
         gfx_draw_string("REPRODUTOR DE VIDEO BGIF (.BMP-GIF 24 FPS):", win_x + 30, win_y + 45, COLOR_GREEN);
 
         int canvas_x = win_x + 30, canvas_y = win_y + 70, canvas_w = 500, canvas_h = 310;
@@ -406,12 +399,11 @@ void draw_desktop_icon(int x, int y, int app_id, const char* title, const char* 
 }
 
 void ui_render(void) {
-    int screen_w = gfx_get_width();   // 1024 HD
-    int screen_h = gfx_get_height();  // 768 HD
+    int screen_w = gfx_get_width();
+    int screen_h = gfx_get_height();
 
     // 1. RENDERIZA O WALLPAPER DINÂMICO
     if (current_wallpaper == 3) {
-        // VÍDEO .BGIF ANIMADO COMO PLANO DE FUNDO DO DESKTOP!
         size_t bgif_sz = 0;
         const uint8_t* bgif_bytes = vfs_read("animacao.bgif", &bgif_sz);
         if (bgif_bytes) {
@@ -442,7 +434,7 @@ void ui_render(void) {
     draw_desktop_icon(ic_x, 440, 7, "8. EXPLORAR", "SINTAXE #|",COLOR_YELLOW);
     draw_desktop_icon(ic_x, 500, 9, "9. VIDEO",    "BGIF PLAYER",COLOR_PURPLE);
 
-    // 3. BARRA DE TAREFAS TRANSPARENTE ESTILO VIDRO NA PARTE INFERIOR HD (Y = 728)
+    // 3. BARRA DE TAREFAS HD (Y = 728)
     gfx_draw_rect_alpha(0, screen_h - 40, screen_w, 40, COLOR_NAVY, 215);
     gfx_draw_rect(10, screen_h - 35, 80, 30, start_menu_open ? COLOR_GREEN : COLOR_BLUE);
     gfx_draw_string("START", 30, screen_h - 24, COLOR_NAVY);
@@ -453,14 +445,14 @@ void ui_render(void) {
     format_time_string(time_str, clock_brt.hour, clock_brt.minute, clock_brt.second);
     gfx_draw_string(time_str, screen_w - 130, screen_h - 24, COLOR_WHITE);
 
-    // 4. RENDERIZA JANELAS ABERTAS COM ORDEM Z-INDEX
+    // 4. LAZY RENDERING DE JANELAS ABERTAS
     for (int z = 1; z <= top_z_index; z++) {
         for (int i = 0; i < MAX_WINDOWS; i++) {
             if (windows[i].is_open && windows[i].z_index == z) draw_single_window(&windows[i]);
         }
     }
 
-    // 5. MENU START POP-UP
+    // 5. MENU START
     if (start_menu_open) {
         gfx_draw_rect_alpha(10, screen_h - 320, 200, 280, COLOR_NAVY, 230);
         gfx_draw_rect(10, screen_h - 320, 200, 25, COLOR_BLUE);
@@ -476,7 +468,7 @@ void ui_render(void) {
         gfx_draw_string("> 9. PLAYER BGIF", 20, screen_h - 40, COLOR_WHITE);
     }
 
-    // 6. PONTEIRO DO MOUSE COM SOMBRA SUAVE
+    // 6. PONTEIRO DO MOUSE COM SOMBRA
     gfx_draw_cursor(mouse_x, mouse_y);
 
     gfx_swap_buffers();
