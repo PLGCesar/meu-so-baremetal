@@ -39,7 +39,6 @@ _start:
     mov $stack_top, %esp
     mov %ebx, %edi
 
-    /* 1. PERMISSOES USER/SUPERVISOR NAS TABELAS DE PAGINAS */
     mov $pdp_table, %eax
     or $7, %eax
     mov %eax, pml4_table
@@ -64,30 +63,28 @@ map_pd:
     cmp $2048, %ecx
     jne map_pd
 
-    /* 2. CARREGA CR3 COM A TABELA PML4 */
     mov $pml4_table, %eax
     mov %eax, %cr3
 
-    /* 3. ATIVA PAE (bit 5) E FLAGS SSE (bits 9 e 10) NO CR4 */
+    /* ATIVA PAE (bit 5) E SSE (bits 9 e 10) NO CR4 */
     mov %cr4, %eax
     or $(1<<5), %eax          /* PAE */
-    or $(3<<9), %eax          /* OSFXSR (bit 9) e OSXMMEXCPT (bit 10) */
+    or $(3<<9), %eax          /* OSFXSR e OSXMMEXCPT */
     mov %eax, %cr4
 
-    /* 4. PASSO CRUCIAL: ATIVA EFER.LME (LONG MODE ENABLE, BIT 8) PRIMEIRO! */
+    /* ATIVA EFER.LME (LONG MODE ENABLE, BIT 8) PRIMEIRO */
     mov $0xC0000080, %ecx
     rdmsr
-    or $(1<<8), %eax          /* Set LME (bit 8) */
+    or $(1<<8), %eax
     wrmsr
 
-    /* 5. AGORA SIM ATIVA A PAGINACAO NO CR0 PARA ENTRAR EM LONG MODE 64-BITS (EFER.LMA = 1) */
+    /* ATIVA A PAGINACAO NO CR0 PARA ENTRAR EM LONG MODE 64-BITS */
     mov %cr0, %eax
-    and $0xFFFFFFFB, %eax     /* Limpa EM (bit 2) */
-    or $0x2, %eax             /* Ativa MP (bit 1) */
-    or $(1<<31), %eax         /* Ativa Paging PG (bit 31) */
+    and $0xFFFFFFFB, %eax     /* Limpa EM */
+    or $0x2, %eax             /* Ativa MP */
+    or $(1<<31), %eax         /* Ativa Paging PG */
     mov %eax, %cr0
 
-    /* 6. CARREGA GDT DE 64-BITS E PULA PARA O LONG MODE */
     lgdt gdt64_pointer
     jmp $0x08, $long_mode_start
 
@@ -100,6 +97,25 @@ long_mode_start:
     mov %ax, %gs
     mov %ax, %ss
 
+    /* CHECA E ATIVA SUPORTE A REGISTRADORES YMM DE 256-BITS (AVX) VIA XSETBV */
+    mov $1, %eax
+    cpuid
+    and $0x18000000, %ecx     /* Testa bits 27 (OSXSAVE) e 28 (AVX) */
+    cmp $0x18000000, %ecx
+    jne skip_avx
+
+    /* 1. Ativa CR4.OSXSAVE (bit 18) */
+    mov %cr4, %rax
+    or $(1 << 18), %rax
+    mov %rax, %cr4
+
+    /* 2. Executa XSETBV (XCR0 = 7 -> x87 + SSE + AVX 256-bits) */
+    xor %ecx, %ecx
+    mov $7, %eax
+    xor %edx, %edx
+    xsetbv
+
+skip_avx:
     call kernel_main
     cli
 1:  hlt
