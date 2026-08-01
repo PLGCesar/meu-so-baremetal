@@ -1,5 +1,6 @@
 #include "../include/gfx.h"
 #include "../include/memory.h"
+#include "../include/util.h"
 
 static uint32_t* framebuffer = 0;
 static uint32_t* back_buffer = 0;
@@ -125,22 +126,22 @@ void gfx_put_pixel_alpha(int x, int y, uint32_t color, uint8_t alpha) {
     back_buffer[y * width + x] = (r << 16) | (g << 8) | b;
 }
 
+// CÓPIA ULTRA-RÁPIDA LINHA POR LINHA COM KMEMCPY DE 64-BITS (MÁXIMA PERFORMANCE HD!)
 void gfx_swap_buffers(void) {
     if (!framebuffer || !back_buffer) return;
+    size_t line_bytes = width * sizeof(uint32_t);
+
     for (uint32_t y = 0; y < height; y++) {
-        uint32_t* src = &back_buffer[y * width];
-        uint32_t* dst = (uint32_t*)((uint8_t*)framebuffer + (y * pitch));
-        for (uint32_t x = 0; x < width; x++) {
-            dst[x] = src[x];
-        }
+        uint8_t* src = (uint8_t*)back_buffer + (y * line_bytes);
+        uint8_t* dst = (uint8_t*)framebuffer + (y * pitch);
+        kmemcpy(dst, src, line_bytes); // Copia a linha inteira de uma só vez!
     }
 }
 
 void gfx_clear(uint32_t color) {
-    for (uint32_t y = 0; y < height; y++) {
-        for (uint32_t x = 0; x < width; x++) {
-            gfx_put_pixel(x, y, color);
-        }
+    size_t total_pixels = width * height;
+    for (size_t i = 0; i < total_pixels; i++) {
+        back_buffer[i] = color;
     }
 }
 
