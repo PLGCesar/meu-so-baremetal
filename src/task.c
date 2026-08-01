@@ -29,6 +29,7 @@ void task_init(void) {
     t->priority = 1;
     t->ticks_remaining = 3;
     t->time_ticks = 0;
+    t->wake_ticks = 0;
     t->is_user = 0;
 
     const char* name = "CapivaraOS_Kernel";
@@ -50,6 +51,7 @@ int task_create(void (*entry)(void), const char* name, int priority) {
     t->priority = priority;
     t->ticks_remaining = (4 - priority);
     t->time_ticks = 0;
+    t->wake_ticks = 0;
     t->is_user = 0;
 
     int i = 0;
@@ -58,12 +60,12 @@ int task_create(void (*entry)(void), const char* name, int priority) {
 
     uint64_t* stk = &t->stack[1024];
 
-    *(--stk) = 0x10;                   // SS Kernel Data
+    *(--stk) = 0x10;
     uint64_t rsp_val = (uint64_t)stk;
-    *(--stk) = rsp_val;                // RSP
-    *(--stk) = 0x0202;                 // RFLAGS
-    *(--stk) = 0x08;                   // CS Kernel Code
-    *(--stk) = (uint64_t)entry;        // RIP
+    *(--stk) = rsp_val;
+    *(--stk) = 0x0202;
+    *(--stk) = 0x08;
+    *(--stk) = (uint64_t)entry;
 
     for (int k = 0; k < 15; k++) *(--stk) = 0;
 
@@ -72,7 +74,6 @@ int task_create(void (*entry)(void), const char* name, int priority) {
     return id;
 }
 
-// CRIA TAREFA EM RING 3 (USER SPACE ISOLADO)
 int task_create_user(void (*entry)(void), const char* name, int priority) {
     if (num_tasks >= MAX_TASKS) return -1;
 
@@ -83,29 +84,35 @@ int task_create_user(void (*entry)(void), const char* name, int priority) {
     t->priority = priority;
     t->ticks_remaining = (4 - priority);
     t->time_ticks = 0;
+    t->wake_ticks = 0;
     t->is_user = 1;
 
     int i = 0;
     while (name[i] != '\0' && i < 31) { t->name[i] = name[i]; i++; }
     t->name[i] = '\0';
 
-    // Aloca Pilha de Usuario Isolada de 16KB
     uint64_t* user_stack = (uint64_t*)kmalloc(16384);
     uint64_t* user_stk_top = (uint64_t*)((uint8_t*)user_stack + 16384);
 
     uint64_t* stk = &t->stack[1024];
 
-    *(--stk) = 0x23;                   // SS = 0x23 (User Data 64-bit RPL 3)
-    *(--stk) = (uint64_t)user_stk_top; // RSP de Usuario
-    *(--stk) = 0x0202;                 // RFLAGS (Interrupcoes Ativas)
-    *(--stk) = 0x2B;                   // CS = 0x2B (User Code 64-bit RPL 3)
-    *(--stk) = (uint64_t)entry;        // RIP (Ponto de Entrada ELF64)
+    *(--stk) = 0x23;
+    *(--stk) = (uint64_t)user_stk_top;
+    *(--stk) = 0x0202;
+    *(--stk) = 0x2B;
+    *(--stk) = (uint64_t)entry;
 
     for (int k = 0; k < 15; k++) *(--stk) = 0;
 
     t->rsp = (uint64_t)stk;
-    serial_write("[TASK SCHEDULER] PROCESSO RING 3 USER SPACE REGISTRADO COM SUCESSO!\n");
+    serial_write("[TASK SCHEDULER] Processo Ring 3 registrado com sucesso!\n");
     return id;
+}
+
+// COLOCA A TAREFA EM ESTADO DE DORMIR (HIBERNACAO SEM GASTAR CPU)
+void task_sleep(uint64_t ticks) {
+    tasks[current_task].state = TASK_STATE_SLEEPING;
+    tasks[current_task].wake_ticks = system_ticks + ticks;
 }
 
 uint64_t schedule(uint64_t current_rsp) {
@@ -114,20 +121,32 @@ uint64_t schedule(uint64_t current_rsp) {
 
     if (num_tasks == 0) return current_rsp;
 
+    // ACORDA TAREFAS DORMINDO SE O TEMPO EXPIROU
+    for (int i = 0; i < num_tasks; i++) {
+        if (tasks[i].state == TASK_STATE_SLEEPING && system_ticks >= tasks[i].wake_ticks) {
+            tasks[i].state = TASK_STATE_READY;
+        }
+    }
+
     tasks[current_task].rsp = current_rsp;
     tasks[current_task].time_ticks++;
 
-    if (tasks[current_task].ticks_remaining > 1) {
+    if (tasks[current_task].ticks_remaining > 1 && tasks[current_task].state == TASK_STATE_RUNNING) {
         tasks[current_task].ticks_remaining--;
         return current_rsp;
     }
 
     int next_task = (current_task + 1) % num_tasks;
-    while (tasks[next_task].state != TASK_STATE_READY && tasks[next_task].state != TASK_STATE_RUNNING) {
+    int checked = 0;
+    while (tasks[next_task].state != TASK_STATE_READY && tasks[next_task].state != TASK_STATE_RUNNING && checked < num_tasks) {
         next_task = (next_task + 1) % num_tasks;
+        checked++;
     }
 
-    tasks[current_task].state = TASK_STATE_READY;
+    if (tasks[current_task].state == TASK_STATE_RUNNING) {
+        tasks[current_task].state = TASK_STATE_READY;
+    }
+
     current_task = next_task;
     tasks[current_task].state = TASK_STATE_RUNNING;
     tasks[current_task].ticks_remaining = (4 - tasks[current_task].priority);

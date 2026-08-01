@@ -209,9 +209,27 @@ void gfx_draw_char(char c, int x, int y, uint32_t color) {
     unsigned char uc = (unsigned char)c;
     if (uc >= 'a' && uc <= 'z') uc -= 32;
     const uint8_t* glyph = font8x8_basic[uc];
+    uint32_t w = gfx_get_width();
+    uint32_t h = gfx_get_height();
+
+    if (x < 0 || x + 8 > (int)w || y < 0 || y + 8 > (int)h) {
+        for (int cy = 0; cy < 8; cy++) {
+            uint8_t row = glyph[cy];
+            if (!row) continue;
+            for (int cx = 0; cx < 8; cx++) {
+                if (row & (1 << (7 - cx))) gfx_put_pixel(x + cx, y + cy, color);
+            }
+        }
+        return;
+    }
+
     for (int cy = 0; cy < 8; cy++) {
+        uint8_t row = glyph[cy];
+        if (!row) continue;
+        uint32_t* dst_row = (uint32_t*)((uintptr_t)gfx_get_width() * (y + cy) * 4 + (x * 4));
+        (void)dst_row;
         for (int cx = 0; cx < 8; cx++) {
-            if (glyph[cy] & (1 << (7 - cx))) gfx_put_pixel(x + cx, y + cy, color);
+            if (row & (1 << (7 - cx))) gfx_put_pixel(x + cx, y + cy, color);
         }
     }
 }

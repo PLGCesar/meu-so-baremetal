@@ -22,6 +22,7 @@ typedef struct task {
     int priority;
     uint64_t time_ticks;
     uint32_t ticks_remaining;
+    uint64_t wake_ticks;
     int is_user;
 } task_t;
 
@@ -29,6 +30,7 @@ void task_init(void);
 void timer_init(void);
 int task_create(void (*entry)(void), const char* name, int priority);
 int task_create_user(void (*entry)(void), const char* name, int priority);
+void task_sleep(uint64_t ticks);
 uint64_t schedule(uint64_t current_rsp);
 
 uint64_t get_system_ticks(void);
