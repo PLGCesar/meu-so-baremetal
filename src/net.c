@@ -66,21 +66,19 @@ void net_send_packet(const uint8_t* packet, uint32_t len) {
 }
 
 uint16_t ip_checksum(void* vdata, size_t length) {
-    char* data = (char*)vdata;
-    uint32_t acc = 0xffff;
-    for (size_t i = 0; i + 1 < length; i += 2) {
-        uint16_t word;
-        fast_memcpy(&word, data + i, 2);
-        acc += __builtin_bswap16(word);
-        if (acc > 0xffff) acc -= 0xffff;
+    uint8_t* data = (uint8_t*)vdata;
+    uint32_t sum = 0;
+    for (size_t i = 0; i < length; i += 2) {
+        uint16_t word = data[i];
+        if (i + 1 < length) {
+            word |= ((uint16_t)data[i + 1]) << 8;
+        }
+        sum += word;
     }
-    if (length & 1) {
-        uint16_t word = 0;
-        fast_memcpy(&word, data + length - 1, 1);
-        acc += __builtin_bswap16(word);
-        if (acc > 0xffff) acc -= 0xffff;
+    while (sum >> 16) {
+        sum = (sum & 0xFFFF) + (sum >> 16);
     }
-    return __builtin_bswap16(~acc);
+    return (uint16_t)(~sum);
 }
 
 // ENVIO NATIVO DE DATAGRAMAS UDP NA PLACA REALTEK RTL8139
