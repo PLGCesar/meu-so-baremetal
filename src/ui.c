@@ -160,6 +160,10 @@ static void process_shell_command(void) {
             const char* msg = "ARQUIVO GRAVADO COM SUCESSO!";
             for (int j = 0; msg[j] != '\0'; j++) shell_output[j] = msg[j];
         }
+    } else if (kstrncmp(input_buffer, "udp ", 4) == 0) {
+        uint32_t target_ip = ((uint32_t)(10) | ((uint32_t)(0) << 8) | ((uint32_t)(2) << 16) | ((uint32_t)(2) << 24));
+        net_send_udp(target_ip, 12345, 8888, input_buffer + 4, kstrlen(input_buffer + 4));
+        kstrcpy(shell_output, "PACOTE UDP ENVIADO PARA 10.0.2.2:8888!");
     } else if (kstrcmp(input_buffer, "clear") == 0) {
         shell_output[0] = '\0';
     }

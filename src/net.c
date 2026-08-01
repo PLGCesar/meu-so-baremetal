@@ -2,12 +2,13 @@
 #include "../include/serial.h"
 #include "../include/util.h"
 #include "../include/memory.h"
+#include "../include/klibc.h"
 
 #define MAKE_IP(a, b, c, d) ((uint32_t)(a) | ((uint32_t)(b) << 8) | ((uint32_t)(c) << 16) | ((uint32_t)(d) << 24))
 
 static uint16_t io_base = 0;
 static uint8_t mac_addr[6];
-static uint32_t my_ip = MAKE_IP(10, 0, 2, 15);
+static uint32_t my_ip = MAKE_IP(10, 0, 2, 15); // IP padrao QEMU Net
 static uint8_t* rx_buffer = NULL;
 static uint32_t rx_offset = 0;
 static uint32_t rx_count = 0;
@@ -61,7 +62,7 @@ void net_send_packet(const uint8_t* packet, uint32_t len) {
 
     tx_buffer_num = (tx_buffer_num + 1) % 4;
     tx_count++;
-    serial_write("[NET] Pacote Ethernet transmitido via RTL8139!\n");
+    serial_write("[NET] Pacote Ethernet Transmitido via RTL8139!\n");
 }
 
 uint16_t ip_checksum(void* vdata, size_t length) {
@@ -69,17 +70,65 @@ uint16_t ip_checksum(void* vdata, size_t length) {
     uint32_t acc = 0xffff;
     for (size_t i = 0; i + 1 < length; i += 2) {
         uint16_t word;
-        kmemcpy(&word, data + i, 2);
+        fast_memcpy(&word, data + i, 2);
         acc += __builtin_bswap16(word);
         if (acc > 0xffff) acc -= 0xffff;
     }
     if (length & 1) {
         uint16_t word = 0;
-        kmemcpy(&word, data + length - 1, 1);
+        fast_memcpy(&word, data + length - 1, 1);
         acc += __builtin_bswap16(word);
         if (acc > 0xffff) acc -= 0xffff;
     }
     return __builtin_bswap16(~acc);
+}
+
+// ENVIO NATIVO DE DATAGRAMAS UDP NA PLACA REALTEK RTL8139
+void net_send_udp(uint32_t dest_ip, uint16_t src_port, uint16_t dest_port, const void* payload, size_t payload_len) {
+    if (!io_base || !payload || payload_len == 0) return;
+
+    size_t total_len = sizeof(ethernet_header_t) + sizeof(ipv4_header_t) + sizeof(udp_header_t) + payload_len;
+    if (total_len > 1500) return;
+
+    uint8_t packet[1500];
+    fast_memset(packet, 0, total_len);
+
+    ethernet_header_t* eth = (ethernet_header_t*)packet;
+    ipv4_header_t* ip = (ipv4_header_t*)(packet + sizeof(ethernet_header_t));
+    udp_header_t* udp = (udp_header_t*)(packet + sizeof(ethernet_header_t) + sizeof(ipv4_header_t));
+    uint8_t* data_ptr = packet + sizeof(ethernet_header_t) + sizeof(ipv4_header_t) + sizeof(udp_header_t);
+
+    // 1. ETHERNET HEADER
+    uint8_t bcast_mac[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+    fast_memcpy(eth->dest_mac, bcast_mac, 6);
+    fast_memcpy(eth->src_mac, mac_addr, 6);
+    eth->type = __builtin_bswap16(0x0800); // IPv4
+
+    // 2. IPV4 HEADER (PROTOCOLO 17 = UDP)
+    ip->ver_ihl = 0x45;
+    ip->tos = 0x00;
+    ip->total_len = __builtin_bswap16(sizeof(ipv4_header_t) + sizeof(udp_header_t) + payload_len);
+    ip->id = __builtin_bswap16(1234);
+    ip->flags_fragment = 0;
+    ip->ttl = 64;
+    ip->protocol = 17; // UDP Protocol
+    ip->src_ip = my_ip;
+    ip->dest_ip = dest_ip;
+    ip->checksum = 0;
+    ip->checksum = ip_checksum(ip, sizeof(ipv4_header_t));
+
+    // 3. UDP HEADER
+    udp->src_port = __builtin_bswap16(src_port);
+    udp->dest_port = __builtin_bswap16(dest_port);
+    udp->length = __builtin_bswap16(sizeof(udp_header_t) + payload_len);
+    udp->checksum = 0; // Checksum opcional no IPv4 (RFC 768)
+
+    // 4. MENSAGEM / PAYLOAD
+    fast_memcpy(data_ptr, payload, payload_len);
+
+    // ENVIA VIA HARDWARE
+    net_send_packet(packet, (uint32_t)total_len);
+    serial_write("[NET UDP] Datagrama UDP transmitido com sucesso!\n");
 }
 
 void net_init(void) {
@@ -108,7 +157,7 @@ void net_init(void) {
     outl(io_base + 0x44, 0x0F);
     outb(io_base + 0x37, 0x0C);
 
-    serial_write("[NET] RTL8139 Inicializada no IP 10.0.2.15 (QEMU Net)!\n");
+    serial_write("[NET] RTL8139 Inicializada no IP 10.0.2.15 com Suporte UDP!\n");
 }
 
 void net_poll(void) {
@@ -128,17 +177,17 @@ void net_poll(void) {
                 ethernet_header_t* r_eth = (ethernet_header_t*)reply;
                 arp_packet_t* r_arp = (arp_packet_t*)(reply + sizeof(ethernet_header_t));
 
-                kmemcpy(r_eth->dest_mac, eth->src_mac, 6);
-                kmemcpy(r_eth->src_mac, mac_addr, 6);
+                fast_memcpy(r_eth->dest_mac, eth->src_mac, 6);
+                fast_memcpy(r_eth->src_mac, mac_addr, 6);
                 r_eth->type = __builtin_bswap16(0x0806);
 
                 r_arp->hw_type = __builtin_bswap16(1);
                 r_arp->proto_type = __builtin_bswap16(0x0800);
                 r_arp->hw_len = 6; r_arp->proto_len = 4;
                 r_arp->opcode = __builtin_bswap16(2);
-                kmemcpy(r_arp->src_mac, mac_addr, 6);
+                fast_memcpy(r_arp->src_mac, mac_addr, 6);
                 r_arp->src_ip = my_ip;
-                kmemcpy(r_arp->dest_mac, arp->src_mac, 6);
+                fast_memcpy(r_arp->dest_mac, arp->src_mac, 6);
                 r_arp->dest_ip = arp->src_ip;
 
                 net_send_packet(reply, sizeof(ethernet_header_t) + sizeof(arp_packet_t));
@@ -149,17 +198,15 @@ void net_poll(void) {
             if (ip->protocol == 1 && ip->dest_ip == my_ip) {
                 icmp_header_t* icmp = (icmp_header_t*)(pkt + 4 + sizeof(ethernet_header_t) + sizeof(ipv4_header_t));
                 if (icmp->type == 8) {
-                    serial_write("[NET] PING RECEBIDO DO QEMU! ENVIANDO PING ECHO REPLY...\n");
-
                     uint8_t reply[128];
-                    kmemcpy(reply, pkt + 4, 98);
+                    fast_memcpy(reply, pkt + 4, 98);
 
                     ethernet_header_t* r_eth = (ethernet_header_t*)reply;
                     ipv4_header_t* r_ip = (ipv4_header_t*)(reply + sizeof(ethernet_header_t));
                     icmp_header_t* r_icmp = (icmp_header_t*)(reply + sizeof(ethernet_header_t) + sizeof(ipv4_header_t));
 
-                    kmemcpy(r_eth->dest_mac, eth->src_mac, 6);
-                    kmemcpy(r_eth->src_mac, mac_addr, 6);
+                    fast_memcpy(r_eth->dest_mac, eth->src_mac, 6);
+                    fast_memcpy(r_eth->src_mac, mac_addr, 6);
 
                     r_ip->dest_ip = ip->src_ip;
                     r_ip->src_ip = my_ip;
@@ -173,6 +220,8 @@ void net_poll(void) {
                     net_send_packet(reply, 98);
                     serial_write("[NET] PING ECHO REPLY ENVIADO COM SUCESSO!\n");
                 }
+            } else if (ip->protocol == 17 && ip->dest_ip == my_ip) { // PACOTE UDP RECEBIDO!
+                serial_write("[NET UDP] Pacote UDP Recebido da Rede!\n");
             }
         }
 
