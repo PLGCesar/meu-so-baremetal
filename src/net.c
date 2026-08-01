@@ -8,38 +8,27 @@
 
 static uint16_t io_base = 0;
 static uint8_t mac_addr[6];
-static uint32_t my_ip = MAKE_IP(10, 0, 2, 15); // IP padrao QEMU Net
+static uint32_t my_ip = MAKE_IP(10, 0, 2, 15);
 static uint8_t* rx_buffer = NULL;
 static uint32_t rx_offset = 0;
 static uint32_t rx_count = 0;
 static uint32_t tx_count = 0;
 
 static inline uint8_t inb(uint16_t port) {
-    uint8_t ret;
-    asm volatile ("inb %1, %0" : "=a"(ret) : "Nd"(port));
-    return ret;
+    uint8_t ret; asm volatile ("inb %1, %0" : "=a"(ret) : "Nd"(port)); return ret;
 }
-
 static inline void outb(uint16_t port, uint8_t val) {
     asm volatile ("outb %b0, %1" : : "a"(val), "Nd"(port));
 }
-
 static inline uint16_t inw(uint16_t port) {
-    uint16_t ret;
-    asm volatile ("inw %1, %w0" : "=a"(ret) : "Nd"(port));
-    return ret;
+    uint16_t ret; asm volatile ("inw %1, %w0" : "=a"(ret) : "Nd"(port)); return ret;
 }
-
 static inline void outw(uint16_t port, uint16_t val) {
     asm volatile ("outw %w0, %1" : : "a"(val), "Nd"(port));
 }
-
 static inline uint32_t inl(uint16_t port) {
-    uint32_t ret;
-    asm volatile ("inl %1, %k0" : "=a"(ret) : "Nd"(port));
-    return ret;
+    uint32_t ret; asm volatile ("inl %1, %k0" : "=a"(ret) : "Nd"(port)); return ret;
 }
-
 static inline void outl(uint16_t port, uint32_t val) {
     asm volatile ("outl %k0, %1" : : "a"(val), "Nd"(port));
 }
@@ -62,26 +51,26 @@ void net_send_packet(const uint8_t* packet, uint32_t len) {
 
     tx_buffer_num = (tx_buffer_num + 1) % 4;
     tx_count++;
-    serial_write("[NET] Pacote Ethernet Transmitido via RTL8139!\n");
+    serial_write("[NET] Pacote Transmitido via RTL8139!\n");
 }
 
+// CHECKSUM RFC 1071 PERFEITO EM BIG ENDIAN
 uint16_t ip_checksum(void* vdata, size_t length) {
     uint8_t* data = (uint8_t*)vdata;
     uint32_t sum = 0;
     for (size_t i = 0; i < length; i += 2) {
-        uint16_t word = data[i];
+        uint16_t word = ((uint16_t)data[i] << 8);
         if (i + 1 < length) {
-            word |= ((uint16_t)data[i + 1]) << 8;
+            word |= data[i + 1];
         }
         sum += word;
     }
     while (sum >> 16) {
         sum = (sum & 0xFFFF) + (sum >> 16);
     }
-    return (uint16_t)(~sum);
+    return __builtin_bswap16((uint16_t)(~sum));
 }
 
-// ENVIO NATIVO DE DATAGRAMAS UDP NA PLACA REALTEK RTL8139
 void net_send_udp(uint32_t dest_ip, uint16_t src_port, uint16_t dest_port, const void* payload, size_t payload_len) {
     if (!io_base || !payload || payload_len == 0) return;
 
@@ -96,13 +85,13 @@ void net_send_udp(uint32_t dest_ip, uint16_t src_port, uint16_t dest_port, const
     udp_header_t* udp = (udp_header_t*)(packet + sizeof(ethernet_header_t) + sizeof(ipv4_header_t));
     uint8_t* data_ptr = packet + sizeof(ethernet_header_t) + sizeof(ipv4_header_t) + sizeof(udp_header_t);
 
-    // 1. ETHERNET HEADER
-    uint8_t bcast_mac[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
-    fast_memcpy(eth->dest_mac, bcast_mac, 6);
+    // 1. ETHERNET HEADER (MAC DO GATEWAY DO QEMU: 52:54:00:12:35:02)
+    uint8_t qemu_gateway_mac[6] = {0x52, 0x54, 0x00, 0x12, 0x35, 0x02};
+    fast_memcpy(eth->dest_mac, qemu_gateway_mac, 6);
     fast_memcpy(eth->src_mac, mac_addr, 6);
     eth->type = __builtin_bswap16(0x0800); // IPv4
 
-    // 2. IPV4 HEADER (PROTOCOLO 17 = UDP)
+    // 2. IPV4 HEADER (DESTINO = GATEWAY 10.0.2.2 DO QEMU)
     ip->ver_ihl = 0x45;
     ip->tos = 0x00;
     ip->total_len = __builtin_bswap16(sizeof(ipv4_header_t) + sizeof(udp_header_t) + payload_len);
@@ -119,14 +108,13 @@ void net_send_udp(uint32_t dest_ip, uint16_t src_port, uint16_t dest_port, const
     udp->src_port = __builtin_bswap16(src_port);
     udp->dest_port = __builtin_bswap16(dest_port);
     udp->length = __builtin_bswap16(sizeof(udp_header_t) + payload_len);
-    udp->checksum = 0; // Checksum opcional no IPv4 (RFC 768)
+    udp->checksum = 0;
 
-    // 4. MENSAGEM / PAYLOAD
+    // 4. MENSAGEM
     fast_memcpy(data_ptr, payload, payload_len);
 
-    // ENVIA VIA HARDWARE
     net_send_packet(packet, (uint32_t)total_len);
-    serial_write("[NET UDP] Datagrama UDP transmitido com sucesso!\n");
+    serial_write("[NET UDP] Datagrama UDP transmitido ao Gateway QEMU!\n");
 }
 
 void net_init(void) {
@@ -189,7 +177,6 @@ void net_poll(void) {
                 r_arp->dest_ip = arp->src_ip;
 
                 net_send_packet(reply, sizeof(ethernet_header_t) + sizeof(arp_packet_t));
-                serial_write("[NET] Resposta ARP Reply Enviada!\n");
             }
         } else if (eth_type == 0x0800) {
             ipv4_header_t* ip = (ipv4_header_t*)(pkt + 4 + sizeof(ethernet_header_t));
@@ -216,10 +203,7 @@ void net_poll(void) {
                     r_icmp->checksum = ip_checksum(r_icmp, 64);
 
                     net_send_packet(reply, 98);
-                    serial_write("[NET] PING ECHO REPLY ENVIADO COM SUCESSO!\n");
                 }
-            } else if (ip->protocol == 17 && ip->dest_ip == my_ip) { // PACOTE UDP RECEBIDO!
-                serial_write("[NET UDP] Pacote UDP Recebido da Rede!\n");
             }
         }
 
