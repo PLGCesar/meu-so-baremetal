@@ -13,7 +13,7 @@ WORKDIR /os
 CMD dd if=/dev/zero of=disk.img bs=1k count=64 && \
     dd if=/dev/zero of=harddisk.img bs=1M count=1 && \
     gcc -m64 -c boot.s -o boot.o -fno-pie -fno-pic && \
-    gcc -m64 -c src/util.c -o util.o -Iinclude -ffreestanding -mno-red-zone -fno-pie -fno-pic -O2 -Wall -Wextra && \
+    gcc -m64 -c src/klibc.c -o klibc.o -Iinclude -ffreestanding -mno-red-zone -fno-pie -fno-pic -O2 && gcc -m64 -c src/util.c -o util.o -Iinclude -ffreestanding -mno-red-zone -fno-pie -fno-pic -O2 -Wall -Wextra && \
     gcc -m64 -c src/gfx.c -o gfx.o -Iinclude -ffreestanding -mno-red-zone -fno-pie -fno-pic -O2 -Wall -Wextra && \
     gcc -m64 -c src/memory.c -o memory.o -Iinclude -ffreestanding -mno-red-zone -fno-pie -fno-pic -O2 -Wall -Wextra && \
     gcc -m64 -c src/idt.c -o idt.o -Iinclude -ffreestanding -mno-red-zone -fno-pie -fno-pic -O2 -Wall -Wextra && \
@@ -32,7 +32,7 @@ CMD dd if=/dev/zero of=disk.img bs=1k count=64 && \
     gcc -m64 -c src/syscall.c -o syscall.o -Iinclude -ffreestanding -mno-red-zone -fno-pie -fno-pic -O2 -Wall -Wextra && \
     gcc -m64 -c src/ui.c -o ui.o -Iinclude -ffreestanding -mno-red-zone -fno-pie -fno-pic -O2 -Wall -Wextra && \
     gcc -m64 -c src/kernel.c -o kernel.o -Iinclude -ffreestanding -mno-red-zone -fno-pie -fno-pic -O2 -Wall -Wextra && \
-    gcc -m64 -no-pie -fno-pic -T linker.ld -o myos.bin -ffreestanding -mno-red-zone -O2 -nostdlib boot.o util.o gfx.o memory.o idt.o serial.o rtc.o ata.o fat32.o vfs.o sound.o music.o bmp.o bgif.o task.o elf.o net.o syscall.o ui.o kernel.o -lgcc && \
+    gcc -m64 -no-pie -fno-pic -T linker.ld -o myos.bin -ffreestanding -mno-red-zone -O2 -nostdlib boot.o klibc.o util.o gfx.o memory.o idt.o serial.o rtc.o ata.o fat32.o vfs.o sound.o music.o bmp.o bgif.o task.o elf.o net.o syscall.o ui.o kernel.o -lgcc && \
     mkdir -p isodir/boot/grub && \
     cp myos.bin isodir/boot/myos.bin && \
     cp grub.cfg isodir/boot/grub/grub.cfg && \
