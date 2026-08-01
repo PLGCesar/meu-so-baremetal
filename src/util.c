@@ -1,13 +1,33 @@
 #include "../include/util.h"
 
 void kmemset(void* dest, uint8_t val, size_t count) {
-    uint8_t* p = (uint8_t*)dest;
-    while (count--) *p++ = val;
+    uint8_t* d = (uint8_t*)dest;
+
+    // Se o endereço estiver alinhado em 8-bytes e o tamanho for >= 8, faz preenchimento de 64-bits
+    if (((uintptr_t)d % 8 == 0) && count >= 8) {
+        uint64_t val64 = (uint64_t)val * 0x0101010101010101ULL;
+        while (count >= 8) {
+            *(uint64_t*)d = val64;
+            d += 8;
+            count -= 8;
+        }
+    }
+    while (count--) *d++ = val;
 }
 
 void kmemcpy(void* dest, const void* src, size_t count) {
     uint8_t* d = (uint8_t*)dest;
     const uint8_t* s = (const uint8_t*)src;
+
+    // Cópia ultra-rápida de 64-bits (8 bytes por instrução) se ambos estiverem alinhados
+    if (((uintptr_t)d % 8 == 0) && ((uintptr_t)s % 8 == 0)) {
+        while (count >= 8) {
+            *(uint64_t*)d = *(const uint64_t*)s;
+            d += 8;
+            s += 8;
+            count -= 8;
+        }
+    }
     while (count--) *d++ = *s++;
 }
 
