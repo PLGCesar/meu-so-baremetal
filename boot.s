@@ -19,12 +19,14 @@ stack_bottom: .skip 16384
 stack_top:
 
 .section .rodata
+.align 8
 gdt64:
-    .quad 0
-gdt64_code:
-    .quad 0x00209A0000000000
-gdt64_data:
-    .quad 0x0000920000000000
+    .quad 0                  /* 0x00: Null */
+    .quad 0x00209A0000000000 /* 0x08: Kernel Code 64-bit */
+    .quad 0x0000920000000000 /* 0x10: Kernel Data 64-bit */
+    .quad 0x00CFFA000000FFFF /* 0x18: User Code 32-bit (Requisito MSR STAR) */
+    .quad 0x0000F20000000000 /* 0x20: User Data 64-bit (Ring 3) */
+    .quad 0x0020FA0000000000 /* 0x28: User Code 64-bit (Ring 3) */
 gdt64_pointer:
     .word gdt64_pointer - gdt64 - 1
     .quad gdt64

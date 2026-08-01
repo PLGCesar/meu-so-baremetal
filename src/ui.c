@@ -14,7 +14,7 @@
 #include "../include/net.h"
 #include "../include/bgif.h"
 
-#define MAX_WINDOWS 10
+#define MAX_WINDOWS 11
 
 typedef struct {
     int id; int app_type; int x, y, w, h; int is_open; int z_index; int anim_scale;
@@ -41,6 +41,21 @@ static int snake_score = 0;
 
 static int video_playing = 1;
 static int video_frame = 0;
+
+// === VARIAVEIS DA CALCULADORA BAREMETAL ===
+static char calc_display[32] = "0";
+static long long calc_val1 = 0;
+static int calc_op = 0; // 1:+, 2:-, 3:*, 4:/
+static int calc_clear_next = 0;
+
+static long long parse_calc_display(void) {
+    long long val = 0; int is_neg = 0, start = 0;
+    if (calc_display[0] == '-') { is_neg = 1; start = 1; }
+    for(int i = start; calc_display[i]; i++) {
+        val = val * 10 + (calc_display[i] - '0');
+    }
+    return is_neg ? -val : val;
+}
 
 static void format_time_string(char* buf, uint8_t h, uint8_t m, uint8_t s) {
     buf[0] = '0' + (h / 10); buf[1] = '0' + (h % 10); buf[2] = ':';
@@ -70,8 +85,9 @@ void ui_init(void) {
     windows[7] = (window_t){7, 7, 240, 100, 560, 420, 0, 8, 100};
     windows[8] = (window_t){8, 8, 150, 70,  580, 480, 0, 9, 100};
     windows[9] = (window_t){9, 9, 210, 80,  580, 500, 1, 10, 100};
+    windows[10]= (window_t){10, 10, 300, 150, 200, 260, 0, 11, 100}; // NOVO APP: CALCULADORA
 
-    top_z_index = 10;
+    top_z_index = 11;
 }
 
 static void process_shell_command(void) {
@@ -137,9 +153,9 @@ void ui_handle_mouse(void) {
     prev_mouse_left = click;
 
     if (just_pressed) sound_click();
-
     int screen_h = gfx_get_height();
 
+    // INTERAÇÃO COM A FILEIRA ESQUERDA (APPS 1~9)
     if (just_pressed && mouse_x >= 15 && mouse_x <= 135) {
         if (mouse_y >= 20 && mouse_y <= 75) bring_to_front(0);
         else if (mouse_y >= 80 && mouse_y <= 135) bring_to_front(1);
@@ -151,20 +167,25 @@ void ui_handle_mouse(void) {
         else if (mouse_y >= 440 && mouse_y <= 495) bring_to_front(7);
         else if (mouse_y >= 500 && mouse_y <= 555) bring_to_front(9);
     }
+    
+    // INTERAÇÃO COM A FILEIRA DIREITA (NOVO APP CALCULADORA)
+    if (just_pressed && mouse_x >= 140 && mouse_x <= 255) {
+        if (mouse_y >= 20 && mouse_y <= 75) bring_to_front(10);
+    }
 
     if (just_pressed && mouse_x >= 10 && mouse_x <= 90 && mouse_y >= screen_h - 35 && mouse_y <= screen_h - 5) {
         start_menu_open = !start_menu_open; return;
     }
 
-    if (start_menu_open && just_pressed && mouse_x >= 10 && mouse_x <= 200 && mouse_y >= screen_h - 320 && mouse_y <= screen_h - 40) {
-        if (mouse_y >= screen_h - 310 && mouse_y < screen_h - 275) bring_to_front(0);
-        else if (mouse_y >= screen_h - 275 && mouse_y < screen_h - 240) bring_to_front(1);
-        else if (mouse_y >= screen_h - 240 && mouse_y < screen_h - 205) bring_to_front(2);
-        else if (mouse_y >= screen_h - 205 && mouse_y < screen_h - 170) bring_to_front(3);
-        else if (mouse_y >= screen_h - 170 && mouse_y < screen_h - 135) bring_to_front(4);
-        else if (mouse_y >= screen_h - 135 && mouse_y < screen_h - 100) bring_to_front(5);
-        else if (mouse_y >= screen_h - 100 && mouse_y < screen_h - 65) bring_to_front(6);
-        else if (mouse_y >= screen_h - 65 && mouse_y <= screen_h - 40) bring_to_front(9);
+    // NOVA LÓGICA SIMPLIFICADA DO MENU INICIAR (EM GRID, SEM IFS MÚLTIPLOS)
+    if (start_menu_open && just_pressed && mouse_x >= 10 && mouse_x <= 200 && mouse_y >= screen_h - 380 && mouse_y <= screen_h - 40) {
+        for (int i = 0; i < 10; i++) {
+            int my = screen_h - 345 + (i * 30);
+            if (mouse_y >= my - 5 && mouse_y <= my + 25) {
+                int mapping[] = {0, 1, 2, 3, 4, 5, 6, 7, 9, 10};
+                bring_to_front(mapping[i]);
+            }
+        }
         start_menu_open = 0; return;
     }
 
@@ -194,6 +215,57 @@ void ui_handle_mouse(void) {
             if (w->app_type == 4 && mouse_y >= w->y + 160 && mouse_y <= w->y + 200) {
                 if (mouse_x >= w->x + 50 && mouse_x <= w->x + 200) music_toggle_play();
                 else if (mouse_x >= w->x + 220 && mouse_x <= w->x + 400) music_next_track();
+            }
+            
+            // ==========================================
+            // EVENTOS DE CLICK NA NOVA APP DA CALCULADORA
+            // ==========================================
+            if (w->app_type == 10) {
+                int col = (mouse_x - (w->x + 15)) / 43;
+                int row = (mouse_y - (w->y + 100)) / 35;
+                if (col >= 0 && col < 4 && row >= 0 && row < 4) {
+                    const char* btns[16] = { "7", "8", "9", "/", "4", "5", "6", "*", "1", "2", "3", "-", "C", "0", "=", "+" };
+                    const char* b = btns[row*4 + col];
+                    
+                    if (b[0] >= '0' && b[0] <= '9') { // Numeros
+                        if (calc_clear_next || (calc_display[0] == '0' && calc_display[1] == '\0')) {
+                            calc_display[0] = b[0]; calc_display[1] = '\0';
+                            calc_clear_next = 0;
+                        } else {
+                            int len = kstrlen(calc_display);
+                            if (len < 15) { calc_display[len] = b[0]; calc_display[len+1] = '\0'; }
+                        }
+                    } else if (b[0] == 'C') { // CLEAR
+                        calc_display[0] = '0'; calc_display[1] = '\0';
+                        calc_val1 = 0; calc_op = 0; calc_clear_next = 0;
+                    } else if (b[0] == '=') { // RESULTADO MATEMÁTICO BAREMETAL!
+                        long long val2 = parse_calc_display();
+                        long long res = 0;
+                        if (calc_op == 1) res = calc_val1 + val2;
+                        else if (calc_op == 2) res = calc_val1 - val2;
+                        else if (calc_op == 3) res = calc_val1 * val2;
+                        else if (calc_op == 4 && val2 != 0) res = calc_val1 / val2;
+                        else res = val2;
+                        
+                        if (res == 0) { calc_display[0] = '0'; calc_display[1] = '\0'; }
+                        else {
+                            char rev[32]; int idx = 0;
+                            long long temp = res < 0 ? -res : res;
+                            while(temp > 0) { rev[idx++] = '0' + (temp % 10); temp /= 10; }
+                            if (res < 0) rev[idx++] = '-';
+                            for(int i=0; i<idx; i++) calc_display[i] = rev[idx - 1 - i];
+                            calc_display[idx] = '\0';
+                        }
+                        calc_op = 0; calc_clear_next = 1;
+                    } else { // OPERADORES MATEMATICOS
+                        calc_val1 = parse_calc_display();
+                        if (b[0] == '+') calc_op = 1;
+                        if (b[0] == '-') calc_op = 2;
+                        if (b[0] == '*') calc_op = 3;
+                        if (b[0] == '/') calc_op = 4;
+                        calc_clear_next = 1;
+                    }
+                }
             }
 
             if (w->app_type == 3) {
@@ -253,7 +325,7 @@ void ui_handle_mouse(void) {
 }
 
 void draw_single_window(window_t* w) {
-    if (!w->is_open) return; // LAZY RENDERING: Se a janela estiver fechada, nao gasta processamento!
+    if (!w->is_open) return; 
 
     if (w->anim_scale < 100) {
         w->anim_scale += 25;
@@ -282,6 +354,7 @@ void draw_single_window(window_t* w) {
     else if (w->app_type == 7) gfx_draw_string("JANELA: EXPLORADOR DE ARQUIVOS (NOTACAO #|)", win_x + 15, win_y + 11, COLOR_WHITE);
     else if (w->app_type == 8) gfx_draw_string("JANELA: JOGO SNAKE EM RING 3 (SYSCALLS)", win_x + 15, win_y + 11, COLOR_WHITE);
     else if (w->app_type == 9) gfx_draw_string("JANELA: PLAYER DE VIDEO (.BMP-GIF / BGIF)", win_x + 15, win_y + 11, COLOR_WHITE);
+    else if (w->app_type == 10) gfx_draw_string("JANELA: CALCULADORA BAREMETAL", win_x + 15, win_y + 11, COLOR_WHITE);
 
     gfx_draw_rect(win_x + win_w - 25, win_y + 7, 16, 16, COLOR_RED);
 
@@ -362,26 +435,39 @@ void draw_single_window(window_t* w) {
         gfx_draw_rect(food_x, food_y, 10, 10, COLOR_RED);
         gfx_draw_rect(snake_x, snake_y, 12, 12, COLOR_GREEN);
     } else if (w->app_type == 9) {
-        // LAZY RENDERING DE VÍDEO: SÓ DECODIFICA SE A JANELA ESTIVER ABERTA!
         gfx_draw_string("REPRODUTOR DE VIDEO BGIF (.BMP-GIF 24 FPS):", win_x + 30, win_y + 45, COLOR_GREEN);
-
         int canvas_x = win_x + 30, canvas_y = win_y + 70, canvas_w = 500, canvas_h = 310;
         size_t bgif_size = 0;
         const uint8_t* bgif_bytes = vfs_read("animacao.bgif", &bgif_size);
-
         if (bgif_bytes) {
             if (video_playing) video_frame++;
-            int total_f = bgif_draw_frame(bgif_bytes, bgif_size, video_frame, canvas_x, canvas_y, canvas_w, canvas_h);
-
+            bgif_draw_frame(bgif_bytes, bgif_size, video_frame, canvas_x, canvas_y, canvas_w, canvas_h);
             int btn_y = win_y + 400;
             gfx_draw_rect(win_x + 30, btn_y, 140, 35, video_playing ? COLOR_RED : COLOR_GREEN);
             gfx_draw_string(video_playing ? "PAUSAR" : "PLAY VIDEO", win_x + 45, btn_y + 12, COLOR_WHITE);
-
             gfx_draw_rect(win_x + 180, btn_y, 170, 35, COLOR_BLUE);
             gfx_draw_string("PROXIMO QUADRO", win_x + 195, btn_y + 12, COLOR_WHITE);
-
             gfx_draw_rect(win_x + 360, btn_y, 190, 35, COLOR_PURPLE);
             gfx_draw_string("BGIF COMO WALLPAPER", win_x + 370, btn_y + 12, COLOR_WHITE);
+        }
+    } else if (w->app_type == 10) { // ====== APP CALCULADORA ======
+        gfx_draw_string("CALCULADORA:", win_x + 15, win_y + 35, COLOR_GREEN);
+        gfx_draw_rect(win_x + 15, win_y + 55, win_w - 30, 30, COLOR_NAVY);
+        gfx_draw_string(calc_display, win_x + 25, win_y + 65, COLOR_WHITE);
+        
+        const char* btns[16] = {
+            "7", "8", "9", "/",
+            "4", "5", "6", "*",
+            "1", "2", "3", "-",
+            "C", "0", "=", "+"
+        };
+        for(int row=0; row<4; row++) {
+            for(int col=0; col<4; col++) {
+                int bx = win_x + 15 + col*43;
+                int by = win_y + 95 + row*35;
+                gfx_draw_rect(bx, by, 38, 30, COLOR_BLUE);
+                gfx_draw_string(btns[row*4 + col], bx + 16, by + 11, COLOR_WHITE);
+            }
         }
     }
 }
@@ -402,7 +488,6 @@ void ui_render(void) {
     int screen_w = gfx_get_width();
     int screen_h = gfx_get_height();
 
-    // 1. RENDERIZA O WALLPAPER DINÂMICO
     if (current_wallpaper == 3) {
         size_t bgif_sz = 0;
         const uint8_t* bgif_bytes = vfs_read("animacao.bgif", &bgif_sz);
@@ -422,7 +507,6 @@ void ui_render(void) {
         gfx_clear(COLOR_DARK_SLATE);
     }
 
-    // 2. ÍCONES DO DESKTOP
     int ic_x = 15;
     draw_desktop_icon(ic_x, 20,  0, "1. SHELL",    "DISCO VFS", COLOR_GREEN);
     draw_desktop_icon(ic_x, 80,  1, "2. MEMORIA",  "RAM HEAP", COLOR_GREEN);
@@ -433,8 +517,10 @@ void ui_render(void) {
     draw_desktop_icon(ic_x, 380, 6, "7. PAINT",    "BMP ESTUDIO",COLOR_WHITE);
     draw_desktop_icon(ic_x, 440, 7, "8. EXPLORAR", "SINTAXE #|",COLOR_YELLOW);
     draw_desktop_icon(ic_x, 500, 9, "9. VIDEO",    "BGIF PLAYER",COLOR_PURPLE);
+    
+    // NOVO ICONE CALCULADORA
+    draw_desktop_icon(140, 20, 10, "10. CALC", "CALCULADORA", COLOR_ORANGE);
 
-    // 3. BARRA DE TAREFAS HD (Y = 728)
     gfx_draw_rect_alpha(0, screen_h - 40, screen_w, 40, COLOR_NAVY, 215);
     gfx_draw_rect(10, screen_h - 35, 80, 30, start_menu_open ? COLOR_GREEN : COLOR_BLUE);
     gfx_draw_string("START", 30, screen_h - 24, COLOR_NAVY);
@@ -445,31 +531,34 @@ void ui_render(void) {
     format_time_string(time_str, clock_brt.hour, clock_brt.minute, clock_brt.second);
     gfx_draw_string(time_str, screen_w - 130, screen_h - 24, COLOR_WHITE);
 
-    // 4. LAZY RENDERING DE JANELAS ABERTAS
     for (int z = 1; z <= top_z_index; z++) {
         for (int i = 0; i < MAX_WINDOWS; i++) {
             if (windows[i].is_open && windows[i].z_index == z) draw_single_window(&windows[i]);
         }
     }
 
-    // 5. MENU START
     if (start_menu_open) {
-        gfx_draw_rect_alpha(10, screen_h - 320, 200, 280, COLOR_NAVY, 230);
-        gfx_draw_rect(10, screen_h - 320, 200, 25, COLOR_BLUE);
-        gfx_draw_string("MENU START", 20, screen_h - 312, COLOR_WHITE);
-
-        gfx_draw_string("> 1. SHELL VFS", 20, screen_h - 285, COLOR_WHITE);
-        gfx_draw_string("> 2. MEMORIA (RAM)", 20, screen_h - 250, COLOR_WHITE);
-        gfx_draw_string("> 3. IDT / HARDWARE", 20, screen_h - 215, COLOR_WHITE);
-        gfx_draw_string("> 4. GALERIA (PINTOR)", 20, screen_h - 180, COLOR_WHITE);
-        gfx_draw_string("> 5. PLAYER DE MUSICA", 20, screen_h - 145, COLOR_WHITE);
-        gfx_draw_string("> 6. TAREFAS (CPU)", 20, screen_h - 110, COLOR_WHITE);
-        gfx_draw_string("> 7. PAINT STUDIO", 20, screen_h - 75, COLOR_WHITE);
-        gfx_draw_string("> 9. PLAYER BGIF", 20, screen_h - 40, COLOR_WHITE);
+        gfx_draw_rect_alpha(10, screen_h - 380, 200, 340, COLOR_NAVY, 230);
+        gfx_draw_rect(10, screen_h - 380, 200, 25, COLOR_BLUE);
+        gfx_draw_string("MENU START", 20, screen_h - 372, COLOR_WHITE);
+        
+        const char* menu_items[] = {
+            "> 1. SHELL VFS",
+            "> 2. MEMORIA (RAM)",
+            "> 3. IDT / HARDWARE",
+            "> 4. GALERIA (PINTOR)",
+            "> 5. PLAYER DE MUSICA",
+            "> 6. TAREFAS (CPU)",
+            "> 7. PAINT STUDIO",
+            "> 8. EXPLORAR",
+            "> 9. PLAYER BGIF",
+            "> 10. CALCULADORA"
+        };
+        for (int i = 0; i < 10; i++) {
+            gfx_draw_string(menu_items[i], 20, screen_h - 345 + (i * 30), COLOR_WHITE);
+        }
     }
 
-    // 6. PONTEIRO DO MOUSE COM SOMBRA
     gfx_draw_cursor(mouse_x, mouse_y);
-
     gfx_swap_buffers();
 }
