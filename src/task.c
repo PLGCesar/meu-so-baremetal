@@ -1,10 +1,11 @@
 #include "../include/task.h"
 #include "../include/serial.h"
+#include "../include/memory.h"
 
 static task_t tasks[MAX_TASKS];
 static int current_task = 0;
 static int num_tasks = 0;
-static uint64_t system_ticks = 0; // CONTADOR DE 64-BITS DE ALTA PRECISÃO
+static uint64_t system_ticks = 0;
 
 static inline void outb(uint16_t port, uint8_t val) {
     asm volatile ("outb %0, %1" : : "a"(val), "Nd"(port));
@@ -28,13 +29,11 @@ void task_init(void) {
     t->priority = 1;
     t->ticks_remaining = 3;
     t->time_ticks = 0;
+    t->is_user = 0;
 
-    const char* name = "Kernel_Main_64b";
+    const char* name = "CapivaraOS_Kernel";
     int i = 0;
-    while (name[i] != '\0' && i < 31) {
-        t->name[i] = name[i];
-        i++;
-    }
+    while (name[i] != '\0' && i < 31) { t->name[i] = name[i]; i++; }
     t->name[i] = '\0';
 
     num_tasks = 1;
@@ -51,27 +50,61 @@ int task_create(void (*entry)(void), const char* name, int priority) {
     t->priority = priority;
     t->ticks_remaining = (4 - priority);
     t->time_ticks = 0;
+    t->is_user = 0;
 
     int i = 0;
-    while (name[i] != '\0' && i < 31) {
-        t->name[i] = name[i];
-        i++;
-    }
+    while (name[i] != '\0' && i < 31) { t->name[i] = name[i]; i++; }
     t->name[i] = '\0';
 
     uint64_t* stk = &t->stack[1024];
 
-    *(--stk) = 0x10;
+    *(--stk) = 0x10;                   // SS Kernel Data
     uint64_t rsp_val = (uint64_t)stk;
-    *(--stk) = rsp_val;
-    *(--stk) = 0x0202;
-    *(--stk) = 0x08;
-    *(--stk) = (uint64_t)entry;
+    *(--stk) = rsp_val;                // RSP
+    *(--stk) = 0x0202;                 // RFLAGS
+    *(--stk) = 0x08;                   // CS Kernel Code
+    *(--stk) = (uint64_t)entry;        // RIP
 
     for (int k = 0; k < 15; k++) *(--stk) = 0;
 
     t->rsp = (uint64_t)stk;
-    serial_write("[TASK SCHEDULER] Processo de 64-bits registrado!\n");
+    serial_write("[TASK SCHEDULER] Processo de Kernel registrado!\n");
+    return id;
+}
+
+// CRIA TAREFA EM RING 3 (USER SPACE ISOLADO)
+int task_create_user(void (*entry)(void), const char* name, int priority) {
+    if (num_tasks >= MAX_TASKS) return -1;
+
+    int id = num_tasks++;
+    task_t* t = &tasks[id];
+    t->pid = id + 1;
+    t->state = TASK_STATE_READY;
+    t->priority = priority;
+    t->ticks_remaining = (4 - priority);
+    t->time_ticks = 0;
+    t->is_user = 1;
+
+    int i = 0;
+    while (name[i] != '\0' && i < 31) { t->name[i] = name[i]; i++; }
+    t->name[i] = '\0';
+
+    // Aloca Pilha de Usuario Isolada de 16KB
+    uint64_t* user_stack = (uint64_t*)kmalloc(16384);
+    uint64_t* user_stk_top = (uint64_t*)((uint8_t*)user_stack + 16384);
+
+    uint64_t* stk = &t->stack[1024];
+
+    *(--stk) = 0x23;                   // SS = 0x23 (User Data 64-bit RPL 3)
+    *(--stk) = (uint64_t)user_stk_top; // RSP de Usuario
+    *(--stk) = 0x0202;                 // RFLAGS (Interrupcoes Ativas)
+    *(--stk) = 0x2B;                   // CS = 0x2B (User Code 64-bit RPL 3)
+    *(--stk) = (uint64_t)entry;        // RIP (Ponto de Entrada ELF64)
+
+    for (int k = 0; k < 15; k++) *(--stk) = 0;
+
+    t->rsp = (uint64_t)stk;
+    serial_write("[TASK SCHEDULER] PROCESSO RING 3 USER SPACE REGISTRADO COM SUCESSO!\n");
     return id;
 }
 

@@ -10,7 +10,7 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /os
 
-CMD dd if=/dev/zero of=disk.img bs=1k count=64 && \
+CMD gcc -m64 -ffreestanding -fno-pie -fno-pic -mno-red-zone -nostdlib -Ttext=0x40000000 src/user_app.c -o app.elf && dd if=/dev/zero of=disk.img bs=1k count=64 && \
     dd if=/dev/zero of=harddisk.img bs=1M count=1 && \
     gcc -m64 -c boot.s -o boot.o -fno-pie -fno-pic && \
     gcc -m64 -c src/klibc.c -o klibc.o -Iinclude -ffreestanding -mno-red-zone -fno-pie -fno-pic -O2 && gcc -m64 -c src/util.c -o util.o -Iinclude -ffreestanding -mno-red-zone -fno-pie -fno-pic -O2 -Wall -Wextra && \

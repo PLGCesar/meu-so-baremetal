@@ -24,7 +24,7 @@ gdt64:
     .quad 0                  /* 0x00: Null */
     .quad 0x00209A0000000000 /* 0x08: Kernel Code 64-bit */
     .quad 0x0000920000000000 /* 0x10: Kernel Data 64-bit */
-    .quad 0x00CFFA000000FFFF /* 0x18: User Code 32-bit (Requisito MSR STAR) */
+    .quad 0x00CFFA000000FFFF /* 0x18: User Code 32-bit */
     .quad 0x0000F20000000000 /* 0x20: User Data 64-bit (Ring 3) */
     .quad 0x0020FA0000000000 /* 0x28: User Code 64-bit (Ring 3) */
 gdt64_pointer:
@@ -39,12 +39,13 @@ _start:
     mov $stack_top, %esp
     mov %ebx, %edi
 
+    /* PERMISSAO USER (7 = Present | Writable | User) NAS PAGINAS */
     mov $pdp_table, %eax
-    or $3, %eax
+    or $7, %eax
     mov %eax, pml4_table
 
     mov $pd_table, %eax
-    or $3, %eax
+    or $7, %eax
     mov %eax, pdp_table
     add $4096, %eax
     mov %eax, pdp_table + 8
@@ -57,7 +58,7 @@ _start:
 map_pd:
     mov $0x200000, %eax
     mul %ecx
-    or $0x83, %eax
+    or $0x87, %eax            /* 0x87 = Present | Writable | User | HugePage */
     mov %eax, pd_table(,%ecx,8)
     inc %ecx
     cmp $2048, %ecx
@@ -211,6 +212,8 @@ irq12_stub:
 .global foto_bmp_end
 .global bgif_anim_start
 .global bgif_anim_end
+.global app_elf_start
+.global app_elf_end
 
 disk_start:
     .incbin "disk.img"
@@ -223,3 +226,8 @@ foto_bmp_end:
 bgif_anim_start:
     .incbin "animacao.bgif"
 bgif_anim_end:
+
+/* EMBUTIMENTO AUTOMATICO DO EXECUTAVEL ELF64 DENTRO DO DISCO VFS */
+app_elf_start:
+    .incbin "app.elf"
+app_elf_end:

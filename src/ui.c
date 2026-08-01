@@ -117,6 +117,14 @@ static void process_shell_command(void) {
             const char* msg = "ARQUIVO GRAVADO COM SUCESSO!";
             for (int j = 0; msg[j] != '\0'; j++) shell_output[j] = msg[j];
         }
+    } else if (kstrncmp(input_buffer, "run ", 4) == 0) {
+        size_t sz = 0;
+        const uint8_t* bytes = vfs_read(input_buffer + 4, &sz);
+        if (bytes && elf_load_and_run(bytes, sz, input_buffer + 4)) {
+            kstrcpy(shell_output, "PROCESSO RING 3 EXECUTADO EM SEGUNDO PLANO!");
+        } else {
+            kstrcpy(shell_output, "ERRO AO CARREGAR EXECUTAVEL ELF!");
+        }
     } else if (kstrcmp(input_buffer, "clear") == 0) {
         shell_output[0] = '\0';
     }

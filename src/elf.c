@@ -9,7 +9,6 @@ int elf_validate(const uint8_t* data, size_t size) {
 
     Elf64_Ehdr* header = (Elf64_Ehdr*)data;
 
-    // Checa Assinatura Mágica: \x7fELF
     if (header->e_ident[0] != 0x7F ||
         header->e_ident[1] != 'E'  ||
         header->e_ident[2] != 'L'  ||
@@ -18,7 +17,6 @@ int elf_validate(const uint8_t* data, size_t size) {
         return 0;
     }
 
-    // Deve ser ELF de 64-bits (Classe 2)
     if (header->e_ident[4] != 2) {
         serial_write("[ELF] Erro: O arquivo nao eh ELF64!\n");
         return 0;
@@ -35,7 +33,6 @@ int elf_load_and_run(const uint8_t* data, size_t size, const char* name) {
 
     uint64_t entry_point = header->e_entry;
 
-    // Varre a tabela de cabeçalhos do programa para carregar segmentos PT_LOAD
     Elf64_Phdr* phdr = (Elf64_Phdr*)(data + header->e_phoff);
     for (int i = 0; i < header->e_phnum; i++) {
         if (phdr[i].p_type == 1) { // PT_LOAD
@@ -47,10 +44,10 @@ int elf_load_and_run(const uint8_t* data, size_t size, const char* name) {
         }
     }
 
-    // Injeta o ponto de entrada do ELF64 como uma tarefa no Escalonador de Processos!
-    int pid = task_create((void (*)(void))(uintptr_t)entry_point, name, 2);
+    // INJETA O EXECUTAVEL PARA RODAR EM RING 3 NO ESCALONADOR!
+    int pid = task_create_user((void (*)(void))(uintptr_t)entry_point, name, 2);
     if (pid >= 0) {
-        serial_write("[ELF] Processo ELF64 carregado e injetado no Escalonador!\n");
+        serial_write("[ELF] Processo ELF64 de Ring 3 Carregado e Ativo!\n");
         return 1;
     }
     return 0;
