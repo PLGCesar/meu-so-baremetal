@@ -39,7 +39,7 @@ _start:
     mov $stack_top, %esp
     mov %ebx, %edi
 
-    /* PERMISSAO USER (7 = Present | Writable | User) NAS PAGINAS */
+    /* PERMISSOES DE MEMORIA USER/SUPERVISOR NAS PAGINAS */
     mov $pdp_table, %eax
     or $7, %eax
     mov %eax, pml4_table
@@ -67,18 +67,23 @@ map_pd:
     mov $pml4_table, %eax
     mov %eax, %cr3
 
+    /* ATIVA PAE (bit 5) E ATIVA SUPORTE SSE/XMM NO CR4 (bits 9 e 10) */
     mov %cr4, %eax
-    or $(1<<5), %eax
+    or $(1<<5), %eax          /* PAE */
+    or $(3<<9), %eax          /* OSFXSR (bit 9) e OSXMMEXCPT (bit 10) */
     mov %eax, %cr4
+
+    /* GARANTE QUE CR0.EM (bit 2) ESTA LIMPO E CR0.MP (bit 1) ATIVO PARA SSE */
+    mov %cr0, %eax
+    and $0xFFFFFFFB, %eax     /* Limpa EM */
+    or $0x2, %eax             /* Ativa MP */
+    or $(1<<31), %eax         /* Paging */
+    mov %eax, %cr0
 
     mov $0xC0000080, %ecx
     rdmsr
     or $(1<<8), %eax
     wrmsr
-
-    mov %cr0, %eax
-    or $(1<<31), %eax
-    mov %eax, %cr0
 
     lgdt gdt64_pointer
     jmp $0x08, $long_mode_start
@@ -227,7 +232,6 @@ bgif_anim_start:
     .incbin "animacao.bgif"
 bgif_anim_end:
 
-/* EMBUTIMENTO AUTOMATICO DO EXECUTAVEL ELF64 DENTRO DO DISCO VFS */
 app_elf_start:
     .incbin "app.elf"
 app_elf_end:

@@ -1,37 +1,9 @@
 #include "../include/klibc.h"
 
-// OTIMIZACAO EXTREMA: SSE2 SIMD 128-bits com escrita Non-Temporal direto na VRAM!
+// IMPLEMENTACAO ULTRA-SEGURA E RAPIDA EM ASSEMBLY 64-BITS (REP MOVSQ)
 void fast_memcpy(void* dest, const void* src, size_t n) {
-    // Se o bloco for >= 64 bytes e alinhado a 16-bytes, usa registradores XMM de 128 bits
-    if (n >= 64 && ((uintptr_t)dest % 16 == 0) && ((uintptr_t)src % 16 == 0)) {
-        size_t blocks = n >> 4; // n / 16
-        size_t remainder = n & 15; // n % 16
-        
-        __asm__ volatile (
-            "1:\n\t"
-            "movdqu (%1), %%xmm0\n\t"
-            "movntdq %%xmm0, (%0)\n\t"
-            "add $16, %0\n\t"
-            "add $16, %1\n\t"
-            "dec %2\n\t"
-            "jnz 1b\n\t"
-            "sfence"
-            : "+r"(dest), "+r"(src), "+r"(blocks)
-            :
-            : "xmm0", "memory"
-        );
-        
-        if (remainder > 0) {
-            uint8_t* d = (uint8_t*)dest;
-            const uint8_t* s = (const uint8_t*)src;
-            while (remainder--) *d++ = *s++;
-        }
-        return;
-    }
-
-    // Fallback ultra-rapido rep movsq (8 bytes por ciclo)
-    size_t qwords = n >> 3;
-    size_t bytes = n & 7;
+    size_t qwords = n >> 3; // n / 8
+    size_t bytes = n & 7;   // n % 8
     __asm__ volatile (
         "rep movsq\n\t"
         "mov %3, %%rcx\n\t"
