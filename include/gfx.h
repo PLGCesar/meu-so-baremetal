@@ -30,12 +30,16 @@ void gfx_draw_char(char c, int x, int y, uint32_t color);
 void gfx_draw_string(const char* str, int x, int y, uint32_t color);
 void gfx_draw_number(int num, int x, int y, uint32_t color);
 
-// FORMATADORES NATIVOS DE 64-BITS (EXIBE ENDEREÇOS E GRANDES VALORES)
 void gfx_draw_number_64(uint64_t num, int x, int y, uint32_t color);
 void gfx_draw_hex_64(uint64_t val, int x, int y, uint32_t color);
 
 void gfx_draw_cursor(int x, int y);
 void gfx_swap_buffers(void);
+
+// SISTEMA DE REGIOES SUJAS (DIRTY RECTANGLES)
+void gfx_mark_dirty(int x, int y, int w, int h);
+void gfx_reset_dirty(void);
+int gfx_is_dirty(void);
 
 void gfx_draw_landscape_sunset(int x, int y, int w, int h);
 void gfx_draw_landscape_cosmos(int x, int y, int w, int h);

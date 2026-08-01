@@ -9,6 +9,11 @@ static size_t height = 768;
 static size_t pitch = 4096;
 static size_t total_pixels_64 = 1024 * 768;
 
+// RASTREAMENTO DE REGIAO SUJA (DIRTY BOUNDING BOX)
+static int dirty_min_x = 1024, dirty_min_y = 768;
+static int dirty_max_x = 0, dirty_max_y = 0;
+static int dirty_active = 0;
+
 static inline void outw(uint16_t port, uint16_t val) { asm volatile ("outw %w0, %1" : : "a"(val), "Nd"(port)); }
 static inline void outl(uint16_t port, uint32_t val) { asm volatile ("outl %k0, %1" : : "a"(val), "Nd"(port)); }
 static inline uint32_t inl(uint16_t port) { uint32_t ret; asm volatile ("inl %1, %k0" : "=a"(ret) : "Nd"(port)); return ret; }
@@ -19,7 +24,7 @@ static uint32_t pci_read_config(uint8_t bus, uint8_t slot, uint8_t func, uint8_t
     return inl(0x0CFC);
 }
 
-// TABELA COMPLETA DE FONTES 8x8 (A-Z, 0-9, SIMBOLOS E MATEMATICA DA CALCULADORA)
+// TABELA COMPLETA DE FONTES 8x8
 static const uint8_t font8x8_basic[128][8] = {
     ['A'] = {0x18, 0x3C, 0x66, 0x66, 0x7E, 0x66, 0x66, 0x00},
     ['B'] = {0x7C, 0x66, 0x66, 0x7C, 0x66, 0x66, 0x7C, 0x00},
@@ -73,6 +78,32 @@ static const uint8_t font8x8_basic[128][8] = {
     [' '] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}
 };
 
+void gfx_mark_dirty(int x, int y, int w, int h) {
+    if (w <= 0 || h <= 0) return;
+    int x2 = x + w;
+    int y2 = y + h;
+    if (x < 0) x = 0;
+    if (y < 0) y = 0;
+    if (x2 > (int)width) x2 = (int)width;
+    if (y2 > (int)height) y2 = (int)height;
+
+    if (x < dirty_min_x) dirty_min_x = x;
+    if (y < dirty_min_y) dirty_min_y = y;
+    if (x2 > dirty_max_x) dirty_max_x = x2;
+    if (y2 > dirty_max_y) dirty_max_y = y2;
+    dirty_active = 1;
+}
+
+void gfx_reset_dirty(void) {
+    dirty_min_x = (int)width;
+    dirty_min_y = (int)height;
+    dirty_max_x = 0;
+    dirty_max_y = 0;
+    dirty_active = 0;
+}
+
+int gfx_is_dirty(void) { return dirty_active; }
+
 void gfx_init(multiboot_info_t* mbi) {
     (void)mbi;
     outw(0x01CE, 4); outw(0x01CF, 0);
@@ -95,6 +126,7 @@ void gfx_init(multiboot_info_t* mbi) {
     if (!framebuffer) framebuffer = (uint32_t*)0xFD000000;
 
     back_buffer = (uint32_t*)kmalloc(total_pixels_64 * sizeof(uint32_t));
+    gfx_reset_dirty();
 }
 
 uint32_t gfx_get_width(void) { return (uint32_t)width; }
@@ -103,26 +135,52 @@ uint32_t gfx_get_height(void) { return (uint32_t)height; }
 void gfx_put_pixel(int x, int y, uint32_t color) {
     if (x < 0 || (size_t)x >= width || y < 0 || (size_t)y >= height) return;
     back_buffer[(size_t)y * width + (size_t)x] = color;
+    gfx_mark_dirty(x, y, 1, 1);
 }
 
 void gfx_put_pixel_alpha(int x, int y, uint32_t color, uint8_t alpha) {
     if (x < 0 || (size_t)x >= width || y < 0 || (size_t)y >= height) return;
-    if (alpha == 255) { back_buffer[(size_t)y * width + (size_t)x] = color; return; }
     if (alpha == 0) return;
 
     size_t offset = (size_t)y * width + (size_t)x;
-    uint32_t bg = back_buffer[offset];
-    
-    uint32_t r = (((color >> 16) & 0xFF) * alpha + ((bg >> 16) & 0xFF) * (255 - alpha)) / 255;
-    uint32_t g = (((color >> 8) & 0xFF) * alpha + ((bg >> 8) & 0xFF) * (255 - alpha)) / 255;
-    uint32_t b = ((color & 0xFF) * alpha + (bg & 0xFF) * (255 - alpha)) / 255;
-
-    back_buffer[offset] = (r << 16) | (g << 8) | b;
+    if (alpha == 255) { 
+        back_buffer[offset] = color; 
+    } else {
+        uint32_t bg = back_buffer[offset];
+        uint32_t r = (((color >> 16) & 0xFF) * alpha + ((bg >> 16) & 0xFF) * (255 - alpha)) / 255;
+        uint32_t g = (((color >> 8) & 0xFF) * alpha + ((bg >> 8) & 0xFF) * (255 - alpha)) / 255;
+        uint32_t b = ((color & 0xFF) * alpha + (bg & 0xFF) * (255 - alpha)) / 255;
+        back_buffer[offset] = (r << 16) | (g << 8) | b;
+    }
+    gfx_mark_dirty(x, y, 1, 1);
 }
 
+// OTIMIZACAO EXTREMA: Copia SOMENTE o retangulo que mudou de fato na tela!
 void gfx_swap_buffers(void) {
-    if (!framebuffer || !back_buffer) return;
-    fast_memcpy(framebuffer, back_buffer, total_pixels_64 * sizeof(uint32_t));
+    if (!framebuffer || !back_buffer || !dirty_active) return;
+
+    int bw = dirty_max_x - dirty_min_x;
+    int bh = dirty_max_y - dirty_min_y;
+
+    if (bw <= 0 || bh <= 0) {
+        gfx_reset_dirty();
+        return;
+    }
+
+    // Se o retangulo sujo for a tela inteira, faz a copia em bloco unico
+    if (bw == (int)width && bh == (int)height) {
+        fast_memcpy(framebuffer, back_buffer, total_pixels_64 * sizeof(uint32_t));
+    } else {
+        // COPIA APENAS AS LINHAS DA REGIAO MODIFICADA (REDUCAO DE 95%+ DO BARRAMENTO)
+        size_t line_bytes = (size_t)bw * sizeof(uint32_t);
+        for (int y = dirty_min_y; y < dirty_max_y; y++) {
+            uint32_t* src = back_buffer + ((size_t)y * width + (size_t)dirty_min_x);
+            uint32_t* dst = framebuffer + ((size_t)y * width + (size_t)dirty_min_x);
+            fast_memcpy(dst, src, line_bytes);
+        }
+    }
+
+    gfx_reset_dirty();
 }
 
 void gfx_clear(uint32_t color) {
@@ -132,6 +190,7 @@ void gfx_clear(uint32_t color) {
     for (size_t i = 0; i < limit; i++) {
         b64[i] = c64;
     }
+    gfx_mark_dirty(0, 0, (int)width, (int)height);
 }
 
 void gfx_draw_rect(int x, int y, int w, int h, uint32_t color) {
@@ -148,6 +207,7 @@ void gfx_draw_rect(int x, int y, int w, int h, uint32_t color) {
             row_ptr[j] = color;
         }
     }
+    gfx_mark_dirty(start_x, start_y, end_x - start_x, end_y - start_y);
 }
 
 void gfx_draw_rect_alpha(int x, int y, int w, int h, uint32_t color, uint8_t alpha) {

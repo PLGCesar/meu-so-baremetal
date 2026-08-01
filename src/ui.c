@@ -33,19 +33,21 @@ static char input_buffer[32]; static int input_index = 0;
 static char shell_output[128] = "SISTEMA VFS & PLAYER DE VIDEO BGIF PRONTOS!";
 static uint32_t paint_canvas[160 * 120]; static uint32_t paint_color = 0xFFFFFF;
 static int prev_mouse_left = 0;
+static int prev_mouse_x = -1, prev_mouse_y = -1;
 
 static int snake_x = 100, snake_y = 100;
 static int snake_dir_x = 5, snake_dir_y = 0;
 static int food_x = 200, food_y = 150;
-static int snake_score = 0;
 
 static int video_playing = 1;
 static int video_frame = 0;
 
-// === VARIAVEIS DA CALCULADORA BAREMETAL ===
+// OTIMIZACAO DE EVENTOS: So redesenha se houver mudanca real!
+static int ui_needs_redraw = 1;
+
 static char calc_display[32] = "0";
 static long long calc_val1 = 0;
-static int calc_op = 0; // 1:+, 2:-, 3:*, 4:/
+static int calc_op = 0;
 static int calc_clear_next = 0;
 
 static long long parse_calc_display(void) {
@@ -68,6 +70,7 @@ void bring_to_front(int win_id) {
     top_z_index++; windows[win_id].z_index = top_z_index;
     if (!windows[win_id].is_open) windows[win_id].anim_scale = 10;
     windows[win_id].is_open = 1;
+    ui_needs_redraw = 1;
 }
 
 void ui_init(void) {
@@ -85,9 +88,10 @@ void ui_init(void) {
     windows[7] = (window_t){7, 7, 240, 100, 560, 420, 0, 8, 100};
     windows[8] = (window_t){8, 8, 150, 70,  580, 480, 0, 9, 100};
     windows[9] = (window_t){9, 9, 210, 80,  580, 500, 1, 10, 100};
-    windows[10]= (window_t){10, 10, 300, 150, 200, 260, 0, 11, 100}; // NOVO APP: CALCULADORA
+    windows[10]= (window_t){10, 10, 300, 150, 200, 260, 0, 11, 100};
 
     top_z_index = 11;
+    ui_needs_redraw = 1;
 }
 
 static void process_shell_command(void) {
@@ -117,11 +121,13 @@ static void process_shell_command(void) {
         shell_output[0] = '\0';
     }
     input_index = 0; input_buffer[0] = '\0';
+    ui_needs_redraw = 1;
 }
 
 void ui_handle_keyboard(void) {
     if (last_key_pressed != 0) {
         char c = last_key_pressed; last_key_pressed = 0;
+        ui_needs_redraw = 1;
 
         if (c == 'w' && snake_dir_y == 0) { snake_dir_x = 0; snake_dir_y = -5; }
         else if (c == 's' && snake_dir_y == 0) { snake_dir_x = 0; snake_dir_y = 5; }
@@ -152,10 +158,15 @@ void ui_handle_mouse(void) {
     int just_pressed = (click && !prev_mouse_left);
     prev_mouse_left = click;
 
+    if (mouse_x != prev_mouse_x || mouse_y != prev_mouse_y || just_pressed) {
+        ui_needs_redraw = 1;
+        prev_mouse_x = mouse_x;
+        prev_mouse_y = mouse_y;
+    }
+
     if (just_pressed) sound_click();
     int screen_h = gfx_get_height();
 
-    // INTERAÇÃO COM A FILEIRA ESQUERDA (APPS 1~9)
     if (just_pressed && mouse_x >= 15 && mouse_x <= 135) {
         if (mouse_y >= 20 && mouse_y <= 75) bring_to_front(0);
         else if (mouse_y >= 80 && mouse_y <= 135) bring_to_front(1);
@@ -168,16 +179,14 @@ void ui_handle_mouse(void) {
         else if (mouse_y >= 500 && mouse_y <= 555) bring_to_front(9);
     }
     
-    // INTERAÇÃO COM A FILEIRA DIREITA (NOVO APP CALCULADORA)
     if (just_pressed && mouse_x >= 140 && mouse_x <= 255) {
         if (mouse_y >= 20 && mouse_y <= 75) bring_to_front(10);
     }
 
     if (just_pressed && mouse_x >= 10 && mouse_x <= 90 && mouse_y >= screen_h - 35 && mouse_y <= screen_h - 5) {
-        start_menu_open = !start_menu_open; return;
+        start_menu_open = !start_menu_open; ui_needs_redraw = 1; return;
     }
 
-    // NOVA LÓGICA SIMPLIFICADA DO MENU INICIAR (EM GRID, SEM IFS MÚLTIPLOS)
     if (start_menu_open && just_pressed && mouse_x >= 10 && mouse_x <= 200 && mouse_y >= screen_h - 380 && mouse_y <= screen_h - 40) {
         for (int i = 0; i < 10; i++) {
             int my = screen_h - 345 + (i * 30);
@@ -186,10 +195,10 @@ void ui_handle_mouse(void) {
                 bring_to_front(mapping[i]);
             }
         }
-        start_menu_open = 0; return;
+        start_menu_open = 0; ui_needs_redraw = 1; return;
     }
 
-    if (start_menu_open && just_pressed) start_menu_open = 0;
+    if (start_menu_open && just_pressed) { start_menu_open = 0; ui_needs_redraw = 1; }
 
     if (just_pressed) {
         int clicked_win = find_clicked_window(mouse_x, mouse_y);
@@ -199,7 +208,7 @@ void ui_handle_mouse(void) {
 
             if (mouse_x >= (w->x + w->w - 25) && mouse_x <= (w->x + w->w - 9) &&
                 mouse_y >= (w->y + 7) && mouse_y <= (w->y + 23)) {
-                w->is_open = 0; dragging_window_id = -1; return;
+                w->is_open = 0; dragging_window_id = -1; ui_needs_redraw = 1; return;
             }
 
             if (mouse_y >= w->y && mouse_y <= (w->y + 30)) {
@@ -210,16 +219,15 @@ void ui_handle_mouse(void) {
                 if (mouse_x >= w->x + 30 && mouse_x <= w->x + 180) video_playing = !video_playing;
                 else if (mouse_x >= w->x + 200 && mouse_x <= w->x + 360) video_frame++;
                 else if (mouse_x >= w->x + 380 && mouse_x <= w->x + 550) current_wallpaper = 3;
+                ui_needs_redraw = 1;
             }
 
             if (w->app_type == 4 && mouse_y >= w->y + 160 && mouse_y <= w->y + 200) {
                 if (mouse_x >= w->x + 50 && mouse_x <= w->x + 200) music_toggle_play();
                 else if (mouse_x >= w->x + 220 && mouse_x <= w->x + 400) music_next_track();
+                ui_needs_redraw = 1;
             }
             
-            // ==========================================
-            // EVENTOS DE CLICK NA NOVA APP DA CALCULADORA
-            // ==========================================
             if (w->app_type == 10) {
                 int col = (mouse_x - (w->x + 15)) / 43;
                 int row = (mouse_y - (w->y + 100)) / 35;
@@ -227,7 +235,7 @@ void ui_handle_mouse(void) {
                     const char* btns[16] = { "7", "8", "9", "/", "4", "5", "6", "*", "1", "2", "3", "-", "C", "0", "=", "+" };
                     const char* b = btns[row*4 + col];
                     
-                    if (b[0] >= '0' && b[0] <= '9') { // Numeros
+                    if (b[0] >= '0' && b[0] <= '9') {
                         if (calc_clear_next || (calc_display[0] == '0' && calc_display[1] == '\0')) {
                             calc_display[0] = b[0]; calc_display[1] = '\0';
                             calc_clear_next = 0;
@@ -235,10 +243,10 @@ void ui_handle_mouse(void) {
                             int len = kstrlen(calc_display);
                             if (len < 15) { calc_display[len] = b[0]; calc_display[len+1] = '\0'; }
                         }
-                    } else if (b[0] == 'C') { // CLEAR
+                    } else if (b[0] == 'C') {
                         calc_display[0] = '0'; calc_display[1] = '\0';
                         calc_val1 = 0; calc_op = 0; calc_clear_next = 0;
-                    } else if (b[0] == '=') { // RESULTADO MATEMÁTICO BAREMETAL!
+                    } else if (b[0] == '=') {
                         long long val2 = parse_calc_display();
                         long long res = 0;
                         if (calc_op == 1) res = calc_val1 + val2;
@@ -257,7 +265,7 @@ void ui_handle_mouse(void) {
                             calc_display[idx] = '\0';
                         }
                         calc_op = 0; calc_clear_next = 1;
-                    } else { // OPERADORES MATEMATICOS
+                    } else {
                         calc_val1 = parse_calc_display();
                         if (b[0] == '+') calc_op = 1;
                         if (b[0] == '-') calc_op = 2;
@@ -265,6 +273,7 @@ void ui_handle_mouse(void) {
                         if (b[0] == '/') calc_op = 4;
                         calc_clear_next = 1;
                     }
+                    ui_needs_redraw = 1;
                 }
             }
 
@@ -282,6 +291,7 @@ void ui_handle_mouse(void) {
                     else if (mouse_x >= w->x + 225 && mouse_x <= w->x + 435) vfs_write_file("paisagem.art", (const uint8_t*)"ARTE RECENTE DA GALERIA", 23);
                     else if (mouse_x >= w->x + 450 && mouse_x <= w->x + 610) current_wallpaper = -1;
                 }
+                ui_needs_redraw = 1;
             }
 
             if (w->app_type == 6 && mouse_y >= w->y + 430 && mouse_y <= w->y + 460) {
@@ -291,6 +301,7 @@ void ui_handle_mouse(void) {
                 else if (mouse_x >= w->x + 170 && mouse_x <= w->x + 210) paint_color = 0xFFFFFF;
                 else if (mouse_x >= w->x + 220 && mouse_x <= w->x + 260) paint_color = 0x000000;
                 else if (mouse_x >= w->x + 310 && mouse_x <= w->x + 510) bmp_export("arte.bmp", paint_canvas, 160, 120);
+                ui_needs_redraw = 1;
             }
         }
     }
@@ -310,6 +321,7 @@ void ui_handle_mouse(void) {
                         }
                     }
                 }
+                ui_needs_redraw = 1;
             }
         }
     }
@@ -319,6 +331,7 @@ void ui_handle_mouse(void) {
         w->x = mouse_x - drag_off_x; w->y = mouse_y - drag_off_y;
         if (w->x < 0) w->x = 0; if (w->x + w->w > 1024) w->x = 1024 - w->w;
         if (w->y < 0) w->y = 0; if (w->y + w->h > 728) w->y = 728 - w->h;
+        ui_needs_redraw = 1;
     }
 
     if (!click) dragging_window_id = -1;
@@ -330,6 +343,7 @@ void draw_single_window(window_t* w) {
     if (w->anim_scale < 100) {
         w->anim_scale += 25;
         if (w->anim_scale > 100) w->anim_scale = 100;
+        ui_needs_redraw = 1;
     }
 
     int base_w = w->w, base_h = w->h;
@@ -364,7 +378,7 @@ void draw_single_window(window_t* w) {
         gfx_draw_string("TERMINAL SHELL VFS:", win_x + 30, win_y + 50, COLOR_GREEN);
         gfx_draw_rect(win_x + 30, win_y + 105, win_w - 60, 35, COLOR_NAVY);
         gfx_draw_string("capivaraos> ", win_x + 40, win_y + 118, COLOR_GREEN);
-        gfx_draw_string(input_buffer, win_x + 90, win_y + 118, COLOR_WHITE);
+        gfx_draw_string(input_buffer, win_x + 130, win_y + 118, COLOR_WHITE);
         gfx_draw_rect(win_x + 30, win_y + 160, win_w - 60, 240, COLOR_NAVY);
         gfx_draw_string(shell_output, win_x + 50, win_y + 220, COLOR_WHITE);
     } else if (w->app_type == 1) {
@@ -450,7 +464,7 @@ void draw_single_window(window_t* w) {
             gfx_draw_rect(win_x + 360, btn_y, 190, 35, COLOR_PURPLE);
             gfx_draw_string("BGIF COMO WALLPAPER", win_x + 370, btn_y + 12, COLOR_WHITE);
         }
-    } else if (w->app_type == 10) { // ====== APP CALCULADORA ======
+    } else if (w->app_type == 10) {
         gfx_draw_string("CALCULADORA:", win_x + 15, win_y + 35, COLOR_GREEN);
         gfx_draw_rect(win_x + 15, win_y + 55, win_w - 30, 30, COLOR_NAVY);
         gfx_draw_string(calc_display, win_x + 25, win_y + 65, COLOR_WHITE);
@@ -485,6 +499,24 @@ void draw_desktop_icon(int x, int y, int app_id, const char* title, const char* 
 }
 
 void ui_render(void) {
+    // SE O VIDEO ESTIVER RODANDO, FORÇA REDESENHO CONSTANTE
+    if (video_playing || current_wallpaper == 3) {
+        ui_needs_redraw = 1;
+    }
+
+    // CHECAGEM DE MUDANÇA DO SEGUNDO NO RELOGIO DA BARRA
+    rtc_time_t clock_brt;
+    rtc_get_time_brt(&clock_brt);
+    static uint8_t last_sec = 255;
+    if (clock_brt.second != last_sec) {
+        last_sec = clock_brt.second;
+        ui_needs_redraw = 1;
+    }
+
+    // SE NADA MUDOU NA TELA, NAO GASTA RECURSO DA CPU E CANCELA SWAP!
+    if (!ui_needs_redraw) return;
+    ui_needs_redraw = 0;
+
     int screen_w = gfx_get_width();
     int screen_h = gfx_get_height();
 
@@ -518,15 +550,12 @@ void ui_render(void) {
     draw_desktop_icon(ic_x, 440, 7, "8. EXPLORAR", "SINTAXE #|",COLOR_YELLOW);
     draw_desktop_icon(ic_x, 500, 9, "9. VIDEO",    "BGIF PLAYER",COLOR_PURPLE);
     
-    // NOVO ICONE CALCULADORA
     draw_desktop_icon(140, 20, 10, "10. CALC", "CALCULADORA", COLOR_ORANGE);
 
     gfx_draw_rect_alpha(0, screen_h - 40, screen_w, 40, COLOR_NAVY, 215);
     gfx_draw_rect(10, screen_h - 35, 80, 30, start_menu_open ? COLOR_GREEN : COLOR_BLUE);
     gfx_draw_string("START", 30, screen_h - 24, COLOR_NAVY);
 
-    rtc_time_t clock_brt;
-    rtc_get_time_brt(&clock_brt);
     char time_str[16];
     format_time_string(time_str, clock_brt.hour, clock_brt.minute, clock_brt.second);
     gfx_draw_string(time_str, screen_w - 130, screen_h - 24, COLOR_WHITE);
@@ -560,5 +589,7 @@ void ui_render(void) {
     }
 
     gfx_draw_cursor(mouse_x, mouse_y);
+    
+    // SWAP INTELIGENTE QUE COPIA SO A AREA QUE MUDOU!
     gfx_swap_buffers();
 }
