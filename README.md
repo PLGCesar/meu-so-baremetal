@@ -80,7 +80,7 @@ qemu-system-x86_64 \
   -machine pcspk-audiodev=audio0
 
 # ESTRUTURA DE ARQUIVOS
-**├── boot.s               # Ponto de entrada Assembly 32->64b, GDT, Paging e IDT Stubs
+├── boot.s               # Ponto de entrada Assembly 32->64b, GDT, Paging e IDT Stubs
 ├── Dockerfile           # Ambiente isolado de build com GCC x86_64 & GRUB
 ├── grub.cfg             # Configuração do Bootloader Multiboot (GRUB)
 ├── linker.ld            # Linker Script para mapeamento do Kernel em 1MB
@@ -95,4 +95,4 @@ qemu-system-x86_64 \
 │   ├── ui.c             # Window Manager, Apps e Desktops
 │   ├── kernel.c         # Ponto de Entrada do Kernel
 │   └── ...
-└── tools/               # Utilitários (Gerador de Vídeos .bgif)**
+└── tools/               # Utilitários (Gerador de Vídeos .bgif)	
