@@ -298,7 +298,7 @@ void draw_single_window(window_t* w) {
         gfx_draw_string("GERENCIADOR DE MEMORIA HEAP (RAM):", win_x + 30, win_y + 50, COLOR_GREEN);
         gfx_draw_rect(win_x + 30, win_y + 90, win_w - 60, 300, COLOR_NAVY);
         gfx_draw_string("RAM ALOCADA ATIVA: ", win_x + 50, win_y + 120, COLOR_WHITE);
-        gfx_draw_number((int)memory_get_total_allocated(), win_x + 220, win_y + 120, COLOR_GREEN);
+        gfx_draw_number_64(memory_get_total_allocated(), win_x + 220, win_y + 120, COLOR_GREEN);
         gfx_draw_string(" BYTES", win_x + 290, win_y + 120, COLOR_WHITE);
     } else if (w->app_type == 2) {
         gfx_draw_string("DIAGNOSTICO DA PLACA DE REDE REALTEK RTL8139:", win_x + 30, win_y + 45, COLOR_GREEN);

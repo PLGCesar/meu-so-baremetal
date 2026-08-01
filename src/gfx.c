@@ -8,19 +8,9 @@ static uint32_t width = 1024;
 static uint32_t height = 768;
 static uint32_t pitch = 4096;
 
-static inline void outw(uint16_t port, uint16_t val) {
-    asm volatile ("outw %w0, %1" : : "a"(val), "Nd"(port));
-}
-
-static inline void outl(uint16_t port, uint32_t val) {
-    asm volatile ("outl %k0, %1" : : "a"(val), "Nd"(port));
-}
-
-static inline uint32_t inl(uint16_t port) {
-    uint32_t ret;
-    asm volatile ("inl %1, %k0" : "=a"(ret) : "Nd"(port));
-    return ret;
-}
+static inline void outw(uint16_t port, uint16_t val) { asm volatile ("outw %w0, %1" : : "a"(val), "Nd"(port)); }
+static inline void outl(uint16_t port, uint32_t val) { asm volatile ("outl %k0, %1" : : "a"(val), "Nd"(port)); }
+static inline uint32_t inl(uint16_t port) { uint32_t ret; asm volatile ("inl %1, %k0" : "=a"(ret) : "Nd"(port)); return ret; }
 
 static uint32_t pci_read_config(uint8_t bus, uint8_t slot, uint8_t func, uint8_t offset) {
     uint32_t address = (uint32_t)((bus << 16) | (slot << 11) | (func << 8) | (offset & 0xfc) | 0x80000000);
@@ -126,7 +116,6 @@ void gfx_put_pixel_alpha(int x, int y, uint32_t color, uint8_t alpha) {
     back_buffer[y * width + x] = (r << 16) | (g << 8) | b;
 }
 
-// CÓPIA ULTRA-RÁPIDA LINHA POR LINHA COM KMEMCPY DE 64-BITS (MÁXIMA PERFORMANCE HD!)
 void gfx_swap_buffers(void) {
     if (!framebuffer || !back_buffer) return;
     size_t line_bytes = width * sizeof(uint32_t);
@@ -134,7 +123,7 @@ void gfx_swap_buffers(void) {
     for (uint32_t y = 0; y < height; y++) {
         uint8_t* src = (uint8_t*)back_buffer + (y * line_bytes);
         uint8_t* dst = (uint8_t*)framebuffer + (y * pitch);
-        kmemcpy(dst, src, line_bytes); // Copia a linha inteira de uma só vez!
+        kmemcpy(dst, src, line_bytes);
     }
 }
 
@@ -183,7 +172,12 @@ void gfx_draw_string(const char* str, int x, int y, uint32_t color) {
 }
 
 void gfx_draw_number(int num, int x, int y, uint32_t color) {
-    char buf[16]; int i = 0;
+    gfx_draw_number_64((uint64_t)num, x, y, color);
+}
+
+// IMPLEMENÇÕES NATIVAS DE 64-BITS
+void gfx_draw_number_64(uint64_t num, int x, int y, uint32_t color) {
+    char buf[32]; int i = 0;
     if (num == 0) { buf[i++] = '0'; }
     else {
         while (num > 0) { buf[i++] = '0' + (num % 10); num /= 10; }
@@ -192,6 +186,18 @@ void gfx_draw_number(int num, int x, int y, uint32_t color) {
     for (int j = 0; j < i / 2; j++) {
         char tmp = buf[j]; buf[j] = buf[i - 1 - j]; buf[i - 1 - j] = tmp;
     }
+    gfx_draw_string(buf, x, y, color);
+}
+
+void gfx_draw_hex_64(uint64_t val, int x, int y, uint32_t color) {
+    char buf[19];
+    buf[0] = '0'; buf[1] = 'x';
+    const char* hex_digits = "0123456789ABCDEF";
+    for (int i = 0; i < 16; i++) {
+        int shift = (15 - i) * 4;
+        buf[2 + i] = hex_digits[(val >> shift) & 0x0F];
+    }
+    buf[18] = '\0';
     gfx_draw_string(buf, x, y, color);
 }
 

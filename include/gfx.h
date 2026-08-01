@@ -29,6 +29,11 @@ void gfx_draw_rect_alpha(int x, int y, int width, int height, uint32_t color, ui
 void gfx_draw_char(char c, int x, int y, uint32_t color);
 void gfx_draw_string(const char* str, int x, int y, uint32_t color);
 void gfx_draw_number(int num, int x, int y, uint32_t color);
+
+// FORMATADORES NATIVOS DE 64-BITS (EXIBE ENDEREÇOS E GRANDES VALORES)
+void gfx_draw_number_64(uint64_t num, int x, int y, uint32_t color);
+void gfx_draw_hex_64(uint64_t val, int x, int y, uint32_t color);
+
 void gfx_draw_cursor(int x, int y);
 void gfx_swap_buffers(void);
 
