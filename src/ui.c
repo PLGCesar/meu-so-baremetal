@@ -158,18 +158,7 @@ void ui_init(void) {
         gfx_draw_rect(w->w - 25, 7, 16, 16, COLOR_RED);
     }
     gfx_set_target(NULL, 0, 0);
-    windows[1] = (window_t){1, 1, 200, 80,  640, 520, 0, 2, 100};
-    windows[2] = (window_t){2, 2, 160, 100, 640, 520, 0, 3, 100};
-    windows[3] = (window_t){3, 3, 180, 50,  640, 540, 0, 4, 100};
-    windows[4] = (window_t){4, 4, 260, 90,  580, 480, 0, 5, 100};
-    windows[5] = (window_t){5, 5, 200, 60,  660, 500, 0, 6, 100};
-    windows[6] = (window_t){6, 6, 130, 70,  600, 520, 0, 7, 100};
-    windows[7] = (window_t){7, 7, 240, 100, 560, 420, 0, 8, 100};
-    windows[8] = (window_t){8, 8, 150, 70,  580, 480, 0, 9, 100};
-    windows[9] = (window_t){9, 9, 210, 80,  580, 500, 1, 10, 100};
-    windows[10]= (window_t){10, 10, 300, 150, 200, 260, 0, 11, 100};
-    windows[11]= (window_t){11, 11, 220, 100, 600, 480, 0, 12, 100};
-    windows[12]= (window_t){12, 12, 180, 70,  620, 480, 0, 13, 100}; // APP 12: CAPIVARAPAD
+    windows[9].is_open = 1;
 
     top_z_index = 13;
     ui_needs_redraw = 1;

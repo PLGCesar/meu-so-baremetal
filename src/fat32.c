@@ -1,3 +1,4 @@
+#pragma GCC diagnostic ignored "-Wunused-parameter"
 #include "../include/fat32.h"
 #include "../include/ata.h"
 #include "../include/serial.h"

@@ -141,12 +141,14 @@ syscall_entry:
     push %rbx
     push %rbp
 
+    mov %rdx, %rcx
+    mov %rsi, %rdx
+    mov %rdi, %rsi
     mov %rax, %rdi
-    mov %rsi, %rsi
-    mov %rdx, %rdx
-    mov %r10, %rcx
-
+    mov %rsp, %rbp
+    and $-16, %rsp
     call sys_handler
+    mov %rbp, %rsp
 
     pop %rbp
     pop %rbx
@@ -199,7 +201,10 @@ syscall_entry:
 .extern exception0_handler
 isr0_stub:
     PUSH_ALL
+    mov %rsp, %rbp
+    and $-16, %rsp
     call exception0_handler
+    mov %rbp, %rsp
     POP_ALL
     iretq
 
@@ -208,6 +213,8 @@ isr0_stub:
 irq0_stub:
     PUSH_ALL
     mov %rsp, %rdi
+    mov %rsp, %rbp
+    and $-16, %rsp
     call schedule
     mov %rax, %rsp
     POP_ALL
@@ -217,7 +224,10 @@ irq0_stub:
 .extern keyboard_handler_main
 irq1_stub:
     PUSH_ALL
+    mov %rsp, %rbp
+    and $-16, %rsp
     call keyboard_handler_main
+    mov %rbp, %rsp
     POP_ALL
     iretq
 
@@ -225,7 +235,10 @@ irq1_stub:
 .extern mouse_handler_main
 irq12_stub:
     PUSH_ALL
+    mov %rsp, %rbp
+    and $-16, %rsp
     call mouse_handler_main
+    mov %rbp, %rsp
     POP_ALL
     iretq
 
