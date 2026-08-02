@@ -57,7 +57,7 @@ _start:
 map_pd:
     mov $0x200000, %eax
     mul %ecx
-    or $0x87, %eax            /* 0x87 = Present | Writable | User | HugePage */
+    or $0x187, %eax           /* 0x187 = Global | HugePage | User | Writable | Present */
     mov %eax, pd_table(,%ecx,8)
     inc %ecx
     cmp $2048, %ecx
@@ -69,6 +69,7 @@ map_pd:
     /* ATIVA PAE (bit 5) E SSE (bits 9 e 10) NO CR4 */
     mov %cr4, %eax
     or $(1<<5), %eax          /* PAE */
+    or $(1<<7), %eax          /* PGE (Page Global Enable) */
     or $(3<<9), %eax          /* OSFXSR e OSXMMEXCPT */
     mov %eax, %cr4
 
