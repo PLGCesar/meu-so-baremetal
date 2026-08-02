@@ -47,26 +47,58 @@ void fat32_list_files(char* out_buf, size_t max_len) {
 }
 
 const uint8_t* fat32_read_file(const char* filename, size_t* out_size) {
-    (void)filename;
-    (void)filename;
+    if (!filename || filename[0] == '\0') return NULL;
+
+    // Converte o nome procurado para o formato 8.3 do FAT32 (11 caracteres preenchidos com espacos)
+    char fat_name[11];
+    kmemset(fat_name, ' ', 11);
+    
+    int i = 0, p = 0;
+    while (filename[i] != '\0' && filename[i] != '.' && p < 8) {
+        char c = filename[i++];
+        if (c >= 'a' && c <= 'z') c -= 32;
+        fat_name[p++] = c;
+    }
+    while (filename[i] != '\0' && filename[i] != '.') i++;
+    if (filename[i] == '.') {
+        i++; p = 8;
+        while (filename[i] != '\0' && p < 11) {
+            char c = filename[i++];
+            if (c >= 'a' && c <= 'z') c -= 32;
+            fat_name[p++] = c;
+        }
+    }
+
     uint32_t root_lba = cluster_start_sector + ((bpb.root_cluster - 2) * bpb.sectors_per_cluster);
+    if (root_lba == 0) return NULL;
+
     ata_read_sector(root_lba, sector_buffer);
     fat32_dir_entry_t* entries = (fat32_dir_entry_t*)sector_buffer;
-    for (int i = 0; i < 16; i++) {
-        if (entries[i].name[0] != 0x00 && (uint8_t)entries[i].name[0] != 0xE5) {
-            uint32_t cluster = ((uint32_t)entries[i].cluster_high << 16) | entries[i].cluster_low;
-            uint32_t file_lba = cluster_start_sector + ((cluster - 2) * bpb.sectors_per_cluster);
-            
-            uint32_t size = entries[i].size;
-            uint32_t sectors = (size + 511) / 512;
-            if (sectors == 0) sectors = 1;
-            
-            uint8_t* file_buf = kmalloc(sectors * 512);
-            if (!file_buf) return NULL;
-            
-            for(uint32_t s = 0; s < sectors; s++) ata_read_sector(file_lba + s, file_buf + (s * 512));
-            *out_size = size;
-            return file_buf;
+
+    for (int e = 0; e < 16; e++) {
+        if (entries[e].name[0] != 0x00 && (uint8_t)entries[e].name[0] != 0xE5) {
+            int match = 1;
+            for (int k = 0; k < 11; k++) {
+                char entry_c = entries[e].name[k];
+                if (entry_c >= 'a' && entry_c <= 'z') entry_c -= 32;
+                if (entry_c != fat_name[k]) { match = 0; break; }
+            }
+            if (match) {
+                uint32_t cluster = ((uint32_t)entries[e].cluster_high << 16) | entries[e].cluster_low;
+                uint32_t file_lba = cluster_start_sector + ((cluster - 2) * bpb.sectors_per_cluster);
+                uint32_t size = entries[e].size;
+                if (size == 0) return NULL;
+
+                uint32_t sectors = (size + 511) / 512;
+                uint8_t* file_buf = kmalloc(sectors * 512);
+                if (!file_buf) return NULL;
+
+                for (uint32_t s = 0; s < sectors; s++) {
+                    ata_read_sector(file_lba + s, file_buf + (s * 512));
+                }
+                *out_size = size;
+                return file_buf;
+            }
         }
     }
     return NULL;
