@@ -1,0 +1,14 @@
+foto.bmp
+shell.bmp
+ram.bmp
+net.bmp
+gallery.bmp
+music.bmp
+tasks.bmp
+paint.bmp
+vfs.bmp
+snake.bmp
+video.bmp
+calc.bmp
+logs.bmp
+pad.bmp
