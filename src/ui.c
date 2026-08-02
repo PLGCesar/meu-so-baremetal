@@ -17,7 +17,12 @@
 #define MAX_WINDOWS 13
 
 typedef struct {
-    int id; int app_type; int x, y, w, h; int is_open; int z_index; uint32_t* cache; uint32_t* cache; 
+    int id; 
+    int app_type; 
+    int x, y, w, h; 
+    int is_open; 
+    int z_index; 
+    uint32_t* cache; 
 } window_t;
 
 static window_t windows[MAX_WINDOWS];
@@ -27,7 +32,6 @@ static int current_wallpaper = -1;
 static int bgif_wallpaper_frame = 0;
 
 static int start_menu_open = 0, gallery_photo = 0;
-
 
 static char input_buffer[32]; static int input_index = 0;
 static char shell_output[128] = "SISTEMA VFS & PLAYER DE VIDEO BGIF PRONTOS!";
@@ -49,7 +53,6 @@ static long long calc_val1 = 0;
 static int calc_op = 0;
 static int calc_clear_next = 0;
 
-// === VARIAVEIS DO CAPIVARAPAD (BLOCO DE NOTAS) ===
 static char pad_buffer[256] = "BEM-VINDO AO CAPIVARAPAD! DIGITE SEU TEXTO AQUI...";
 static int pad_index = 50;
 
@@ -120,25 +123,23 @@ void ui_init(void) {
     kmemset(paint_canvas, 0, sizeof(paint_canvas));
     input_buffer[0] = '\0';
 
-    windows[0] = (window_t){0, 0, 240, 60,  640, 520, 0, 1};
-    windows[1] = (window_t){1, 1, 200, 80,  640, 520, 0, 2};
-    windows[2] = (window_t){2, 2, 160, 100, 640, 520, 0, 3};
-    windows[3] = (window_t){3, 3, 180, 50,  640, 540, 0, 4};
-    windows[4] = (window_t){4, 4, 260, 90,  580, 480, 0, 5};
-    windows[5] = (window_t){5, 5, 200, 60,  660, 500, 0, 6};
-    windows[6] = (window_t){6, 6, 130, 70,  600, 520, 0, 7};
-    windows[7] = (window_t){7, 7, 240, 100, 560, 420, 0, 8};
-    windows[8] = (window_t){8, 8, 150, 70,  580, 480, 0, 9};
-    windows[9] = (window_t){9, 9, 210, 80,  580, 500, 0, 10};
-    windows[10]= (window_t){10, 10, 300, 150, 200, 260, 0, 11};
-    windows[11]= (window_t){11, 11, 220, 100, 600, 480, 0, 12};
-    windows[12]= (window_t){12, 12, 180, 70,  620, 480, 0, 13};
-
-    windows[9].is_open = 1;
+    windows[0] = (window_t){0, 0, 240, 60,  640, 520, 0, 1, NULL};
+    windows[1] = (window_t){1, 1, 200, 80,  640, 520, 0, 2, NULL};
+    windows[2] = (window_t){2, 2, 160, 100, 640, 520, 0, 3, NULL};
+    windows[3] = (window_t){3, 3, 180, 50,  640, 540, 0, 4, NULL};
+    windows[4] = (window_t){4, 4, 260, 90,  580, 480, 0, 5, NULL};
+    windows[5] = (window_t){5, 5, 200, 60,  660, 500, 0, 6, NULL};
+    windows[6] = (window_t){6, 6, 130, 70,  600, 520, 0, 7, NULL};
+    windows[7] = (window_t){7, 7, 240, 100, 560, 420, 0, 8, NULL};
+    windows[8] = (window_t){8, 8, 150, 70,  580, 480, 0, 9, NULL};
+    windows[9] = (window_t){9, 9, 210, 80,  580, 500, 1, 10, NULL}; // Player BGIF inicia aberto
+    windows[10]= (window_t){10, 10, 300, 150, 200, 260, 0, 11, NULL};
+    windows[11]= (window_t){11, 11, 220, 100, 600, 480, 0, 12, NULL};
+    windows[12]= (window_t){12, 12, 180, 70,  620, 480, 0, 13, NULL};
 
     for (int i = 0; i < MAX_WINDOWS; i++) {
         window_t* w = &windows[i];
-        w->cache = kmalloc(w->w * w->h * sizeof(uint32_t));
+        w->cache = (uint32_t*)kmalloc(w->w * w->h * sizeof(uint32_t));
         gfx_set_target(w->cache, w->w, w->h);
         gfx_draw_rect(0, 0, w->w, w->h, COLOR_GRAY);
         gfx_draw_rect(0, 0, w->w, 30, COLOR_LIGHT_GRAY);
@@ -159,9 +160,8 @@ void ui_init(void) {
         gfx_draw_string(title, 15, 11, COLOR_WHITE);
         gfx_draw_rect(w->w - 25, 7, 16, 16, COLOR_RED);
     }
+    
     gfx_set_target(NULL, 0, 0);
-    windows[9].is_open = 1;
-
     top_z_index = 13;
     ui_needs_redraw = 1;
 }
@@ -213,7 +213,6 @@ void ui_handle_keyboard(void) {
         char c = last_key_pressed; last_key_pressed = 0;
         ui_needs_redraw = 1;
 
-        // SE A JANELA DO BLOCO DE NOTAS ESTIVER EM FOCO (Z-INDEX MAIS ALTO)
         int top_win = -1, highest_z = -1;
         for (int i = 0; i < MAX_WINDOWS; i++) {
             if (windows[i].is_open && windows[i].z_index > highest_z) {
@@ -222,7 +221,7 @@ void ui_handle_keyboard(void) {
             }
         }
 
-        if (top_win != -1 && windows[top_win].app_type == 12) { // CAPIVARAPAD
+        if (top_win != -1 && windows[top_win].app_type == 12) {
             if (c == '\b') {
                 if (pad_index > 0) pad_buffer[--pad_index] = '\0';
             } else if (c == '\n') {
@@ -295,7 +294,7 @@ void ui_handle_mouse(void) {
     if (just_pressed && mouse_x >= 140 && mouse_x <= 255) {
         if (mouse_y >= 20 && mouse_y <= 75) bring_to_front(10);
         else if (mouse_y >= 80 && mouse_y <= 135) bring_to_front(11);
-        else if (mouse_y >= 140 && mouse_y <= 195) bring_to_front(12); // CAPIVARAPAD
+        else if (mouse_y >= 140 && mouse_y <= 195) bring_to_front(12);
     }
 
     if (just_pressed && mouse_x >= 10 && mouse_x <= 90 && mouse_y >= screen_h - 35 && mouse_y <= screen_h - 5) {
@@ -330,12 +329,11 @@ void ui_handle_mouse(void) {
                 dragging_window_id = clicked_win; drag_off_x = mouse_x - w->x; drag_off_y = mouse_y - w->y;
             }
 
-            // BOTÕES DO CAPIVARAPAD (SALVAR E LIMPAR)
             if (w->app_type == 12 && mouse_y >= w->y + 420 && mouse_y <= w->y + 455) {
-                if (mouse_x >= w->x + 30 && mouse_x <= w->x + 220) { // SALVAR .TXT
+                if (mouse_x >= w->x + 30 && mouse_x <= w->x + 220) {
                     vfs_write_file("nota.txt", (const uint8_t*)pad_buffer, kstrlen(pad_buffer));
                     sound_click();
-                } else if (mouse_x >= w->x + 240 && mouse_x <= w->x + 400) { // LIMPAR
+                } else if (mouse_x >= w->x + 240 && mouse_x <= w->x + 400) {
                     pad_buffer[0] = '\0'; pad_index = 0;
                     sound_click();
                 }
@@ -470,8 +468,7 @@ void draw_single_window(window_t* w) {
     if (!w->is_open) return;
     int win_x = w->x; int win_y = w->y; int win_w = w->w; int win_h = w->h;
     gfx_draw_rect_alpha(win_x + 8, win_y + 8, win_w, win_h, 0x000000, 100);
-    gfx_blit(w->cache, win_x, win_y, win_w, win_h);
-
+    if(w->cache) { gfx_blit(w->cache, win_x, win_y, win_w, win_h); }
 
     if (w->app_type == 0) {
         gfx_draw_string("TERMINAL SHELL VFS:", win_x + 30, win_y + 50, COLOR_GREEN);
@@ -600,22 +597,16 @@ void draw_single_window(window_t* w) {
         gfx_draw_string("[*] OTIMIZADO: Teclado e Mouse sem Latencia (Buffer PS/2)", win_x + 35, win_y + 200, COLOR_BLUE);
         gfx_draw_string("[*] OTIMIZADO: Efeitos Sonoros com HLT sem gastar CPU", win_x + 35, win_y + 220, COLOR_BLUE);
 
-        gfx_draw_string("[-] REMOVIDO: Laços de Espera Cega (for/while)", win_x + 35, win_y + 250, COLOR_RED);
-    } else if (w->app_type == 12) { // ================= CAPIVARAPAD =================
+        gfx_draw_string("[-] REMOVIDO: Lacos de Espera Cega (for/while)", win_x + 35, win_y + 250, COLOR_RED);
+    } else if (w->app_type == 12) {
         gfx_draw_string("CAPIVARAPAD - BLOCO DE NOTAS DIGITAVEL:", win_x + 20, win_y + 45, COLOR_GREEN);
-        
-        // FOLHA DE PAPEL DIGITAL BRANCA PARA TEXTO
         gfx_draw_rect(win_x + 20, win_y + 70, win_w - 40, 330, COLOR_WHITE);
-        
-        // EXIBE O TEXTO DIGITADO PELO USUARIO
         gfx_draw_string(pad_buffer, win_x + 30, win_y + 85, COLOR_DARK_SLATE);
         
-        // CURSOR DE DIGITACAO PISCANTE
         int cursor_x_pos = win_x + 30 + ((pad_index % 70) * 8);
         int cursor_y_pos = win_y + 85 + ((pad_index / 70) * 12);
         gfx_draw_rect(cursor_x_pos, cursor_y_pos, 2, 10, COLOR_RED);
 
-        // BOTOES DE AÇÃO
         int btn_pad_y = win_y + 420;
         gfx_draw_rect(win_x + 30, btn_pad_y, 190, 35, COLOR_BLUE);
         gfx_draw_string("SALVAR EM NOTA.TXT", win_x + 40, btn_pad_y + 12, COLOR_WHITE);
@@ -694,7 +685,6 @@ void ui_render(void) {
     draw_desktop_icon(ic_x, 440, 7, "8. EXPLORAR", "SINTAXE #|",COLOR_YELLOW);
     draw_desktop_icon(ic_x, 500, 9, "9. VIDEO",    "BGIF PLAYER",COLOR_PURPLE);
     
-    // FILEIRA 2: CALCULADORA, LOGS E CAPIVARAPAD
     draw_desktop_icon(140, 20,  10, "10. CALC", "CALCULADORA", COLOR_ORANGE);
     draw_desktop_icon(140, 80,  11, "11. LOGS", "CHANGELOG",   COLOR_GREEN);
     draw_desktop_icon(140, 140, 12, "12. NOTAS", "CAPIVARAPAD",COLOR_YELLOW);
