@@ -48,6 +48,7 @@ void fat32_list_files(char* out_buf, size_t max_len) {
 
 const uint8_t* fat32_read_file(const char* filename, size_t* out_size) {
     (void)filename;
+    (void)filename;
     uint32_t root_lba = cluster_start_sector + ((bpb.root_cluster - 2) * bpb.sectors_per_cluster);
     ata_read_sector(root_lba, sector_buffer);
     fat32_dir_entry_t* entries = (fat32_dir_entry_t*)sector_buffer;

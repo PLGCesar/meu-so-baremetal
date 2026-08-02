@@ -57,7 +57,7 @@ _start:
 map_pd:
     mov $0x200000, %eax
     mul %ecx
-    or $0x187, %eax           /* 0x187 = Global | HugePage | User | Writable | Present */
+    or $0x187, %eax           /* Global | HugePage | User | Writable | Present */
     mov %eax, pd_table(,%ecx,8)
     inc %ecx
     cmp $2048, %ecx
@@ -66,24 +66,22 @@ map_pd:
     mov $pml4_table, %eax
     mov %eax, %cr3
 
-    /* ATIVA PAE (bit 5) E SSE (bits 9 e 10) NO CR4 */
+    /* ATIVA PAE (bit 5), PGE (bit 7) E SSE (bits 9 e 10) NO CR4 */
     mov %cr4, %eax
-    or $(1<<5), %eax          /* PAE */
-    or $(1<<7), %eax          /* PGE (Page Global Enable) */
-    or $(3<<9), %eax          /* OSFXSR e OSXMMEXCPT */
+    or $(1<<5), %eax
+    or $(1<<7), %eax
+    or $(3<<9), %eax
     mov %eax, %cr4
 
-    /* ATIVA EFER.LME (LONG MODE ENABLE, BIT 8) PRIMEIRO */
     mov $0xC0000080, %ecx
     rdmsr
     or $(1<<8), %eax
     wrmsr
 
-    /* ATIVA A PAGINACAO NO CR0 PARA ENTRAR EM LONG MODE 64-BITS */
     mov %cr0, %eax
-    and $0xFFFFFFFB, %eax     /* Limpa EM */
-    or $0x2, %eax             /* Ativa MP */
-    or $(1<<31), %eax         /* Ativa Paging PG */
+    and $0xFFFFFFFB, %eax
+    or $0x2, %eax
+    or $(1<<31), %eax
     mov %eax, %cr0
 
     lgdt gdt64_pointer
@@ -98,19 +96,16 @@ long_mode_start:
     mov %ax, %gs
     mov %ax, %ss
 
-    /* CHECA E ATIVA SUPORTE A REGISTRADORES YMM DE 256-BITS (AVX) VIA XSETBV */
     mov $1, %eax
     cpuid
-    and $0x18000000, %ecx     /* Testa bits 27 (OSXSAVE) e 28 (AVX) */
+    and $0x18000000, %ecx
     cmp $0x18000000, %ecx
     jne skip_avx
 
-    /* 1. Ativa CR4.OSXSAVE (bit 18) */
     mov %cr4, %rax
     or $(1 << 18), %rax
     mov %rax, %cr4
 
-    /* 2. Executa XSETBV (XCR0 = 7 -> x87 + SSE + AVX 256-bits) */
     xor %ecx, %ecx
     mov $7, %eax
     xor %edx, %edx
@@ -141,10 +136,13 @@ syscall_entry:
     push %rbx
     push %rbp
 
+    /* Impede o clobbering dos registradores da ABI AMD64 Syscall */
     mov %rdx, %rcx
     mov %rsi, %rdx
     mov %rdi, %rsi
     mov %rax, %rdi
+    
+    /* Alinha a pilha para evitar Triple Fault no SSE do Kernel */
     mov %rsp, %rbp
     and $-16, %rsp
     call sys_handler
@@ -162,39 +160,15 @@ syscall_entry:
     sysretq
 
 .macro PUSH_ALL
-    push %rax
-    push %rcx
-    push %rdx
-    push %rbx
-    push %rbp
-    push %rsi
-    push %rdi
-    push %r8
-    push %r9
-    push %r10
-    push %r11
-    push %r12
-    push %r13
-    push %r14
-    push %r15
+    push %rax; push %rcx; push %rdx; push %rbx; push %rbp
+    push %rsi; push %rdi; push %r8; push %r9; push %r10
+    push %r11; push %r12; push %r13; push %r14; push %r15
 .endm
 
 .macro POP_ALL
-    pop %r15
-    pop %r14
-    pop %r13
-    pop %r12
-    pop %r11
-    pop %r10
-    pop %r9
-    pop %r8
-    pop %rdi
-    pop %rsi
-    pop %rbp
-    pop %rbx
-    pop %rdx
-    pop %rcx
-    pop %rax
+    pop %r15; pop %r14; pop %r13; pop %r12; pop %r11
+    pop %r10; pop %r9; pop %r8; pop %rdi; pop %rsi
+    pop %rbp; pop %rbx; pop %rdx; pop %rcx; pop %rax
 .endm
 
 .global isr0_stub
@@ -213,8 +187,6 @@ isr0_stub:
 irq0_stub:
     PUSH_ALL
     mov %rsp, %rdi
-    mov %rsp, %rbp
-    and $-16, %rsp
     call schedule
     mov %rax, %rsp
     POP_ALL
@@ -244,27 +216,12 @@ irq12_stub:
 
 .section .data
 .align 4
-.global disk_start
-.global disk_end
-.global foto_bmp_start
-.global foto_bmp_end
-.global bgif_anim_start
-.global bgif_anim_end
-.global app_elf_start
-.global app_elf_end
+.global disk_start; .global disk_end
+.global foto_bmp_start; .global foto_bmp_end
+.global bgif_anim_start; .global bgif_anim_end
+.global app_elf_start; .global app_elf_end
 
-disk_start:
-    .incbin "disk.img"
-disk_end:
-
-foto_bmp_start:
-    .incbin "foto.bmp"
-foto_bmp_end:
-
-bgif_anim_start:
-    .incbin "animacao.bgif"
-bgif_anim_end:
-
-app_elf_start:
-    .incbin "app.elf"
-app_elf_end:
+disk_start: .incbin "disk.img"; disk_end:
+foto_bmp_start: .incbin "foto.bmp"; foto_bmp_end:
+bgif_anim_start: .incbin "animacao.bgif"; bgif_anim_end:
+app_elf_start: .incbin "app.elf"; app_elf_end:

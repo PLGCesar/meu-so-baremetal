@@ -17,7 +17,7 @@
 #define MAX_WINDOWS 13
 
 typedef struct {
-    int id; int app_type; int x, y, w, h; int is_open; int z_index; uint32_t* cache; 
+    int id; int app_type; int x, y, w, h; int is_open; int z_index; uint32_t* cache; uint32_t* cache; 
 } window_t;
 
 static window_t windows[MAX_WINDOWS];
@@ -120,19 +120,21 @@ void ui_init(void) {
     kmemset(paint_canvas, 0, sizeof(paint_canvas));
     input_buffer[0] = '\0';
 
-    windows[0] = (window_t){0, 0, 240, 60,  640, 520, 0, 1, NULL};
-    windows[1] = (window_t){1, 1, 200, 80,  640, 520, 0, 2, NULL};
-    windows[2] = (window_t){2, 2, 160, 100, 640, 520, 0, 3, NULL};
-    windows[3] = (window_t){3, 3, 180, 50,  640, 540, 0, 4, NULL};
-    windows[4] = (window_t){4, 4, 260, 90,  580, 480, 0, 5, NULL};
-    windows[5] = (window_t){5, 5, 200, 60,  660, 500, 0, 6, NULL};
-    windows[6] = (window_t){6, 6, 130, 70,  600, 520, 0, 7, NULL};
-    windows[7] = (window_t){7, 7, 240, 100, 560, 420, 0, 8, NULL};
-    windows[8] = (window_t){8, 8, 150, 70,  580, 480, 0, 9, NULL};
-    windows[9] = (window_t){9, 9, 210, 80,  580, 500, 0, 10, NULL};
-    windows[10]= (window_t){10, 10, 300, 150, 200, 260, 0, 11, NULL};
-    windows[11]= (window_t){11, 11, 220, 100, 600, 480, 0, 12, NULL};
-    windows[12]= (window_t){12, 12, 180, 70,  620, 480, 0, 13, NULL};
+    windows[0] = (window_t){0, 0, 240, 60,  640, 520, 0, 1};
+    windows[1] = (window_t){1, 1, 200, 80,  640, 520, 0, 2};
+    windows[2] = (window_t){2, 2, 160, 100, 640, 520, 0, 3};
+    windows[3] = (window_t){3, 3, 180, 50,  640, 540, 0, 4};
+    windows[4] = (window_t){4, 4, 260, 90,  580, 480, 0, 5};
+    windows[5] = (window_t){5, 5, 200, 60,  660, 500, 0, 6};
+    windows[6] = (window_t){6, 6, 130, 70,  600, 520, 0, 7};
+    windows[7] = (window_t){7, 7, 240, 100, 560, 420, 0, 8};
+    windows[8] = (window_t){8, 8, 150, 70,  580, 480, 0, 9};
+    windows[9] = (window_t){9, 9, 210, 80,  580, 500, 0, 10};
+    windows[10]= (window_t){10, 10, 300, 150, 200, 260, 0, 11};
+    windows[11]= (window_t){11, 11, 220, 100, 600, 480, 0, 12};
+    windows[12]= (window_t){12, 12, 180, 70,  620, 480, 0, 13};
+
+    windows[9].is_open = 1;
 
     for (int i = 0; i < MAX_WINDOWS; i++) {
         window_t* w = &windows[i];

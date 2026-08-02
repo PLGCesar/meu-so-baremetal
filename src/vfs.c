@@ -17,6 +17,7 @@ void vfs_init(void) {
 
 void vfs_list(char* out_buf, size_t max_len) {
     (void)max_len;
+    (void)max_len;
     char fat_buf[128];
     fat32_list_files(fat_buf, 128);
 
@@ -25,6 +26,7 @@ void vfs_list(char* out_buf, size_t max_len) {
 }
 
 void vfs_list_custom_format(char* out_buf, size_t max_len) {
+    (void)max_len;
     (void)max_len;
     out_buf[0] = '\0';
     kstrcpy(out_buf, "#|ROOT*app.elf\n#|ROOT*animacao.bgif\n#|ROOT*foto.bmp\n");
