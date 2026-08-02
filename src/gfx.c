@@ -88,7 +88,7 @@ static const uint8_t font8x8_basic[256][8] = {
     [63]  = {0x3C, 0x66, 0x0C, 0x18, 0x18, 0x00, 0x18, 0x00}, // ?
     [64]  = {0x3C, 0x66, 0x6E, 0x6E, 0x60, 0x3E, 0x00, 0x00}, // @
     [91]  = {0x3C, 0x30, 0x30, 0x30, 0x30, 0x30, 0x3C, 0x00}, // [
-    [92]  = {0x80, 0x40, 0x20, 0x10, 0x08, 0x04, 0x02, 0x00}, // \
+    [92]  = {0x80, 0x40, 0x20, 0x10, 0x08, 0x04, 0x02, 0x00}, // BACKSLASH
     [93]  = {0x3C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x3C, 0x00}, // ]
     [94]  = {0x18, 0x36, 0x66, 0x00, 0x00, 0x00, 0x00, 0x00}, // ^
     [95]  = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xFF, 0x00}, // _
@@ -126,11 +126,15 @@ static const uint8_t font8x8_basic[256][8] = {
 void gfx_mark_dirty(int x, int y, int w, int h) {
     if (w <= 0 || h <= 0) return;
     int x2 = x + w; int y2 = y + h;
-    if (x < 0) x = 0; if (y < 0) y = 0;
-    if (x2 > (int)active_width) x2 = (int)active_width; if (y2 > (int)active_height) y2 = (int)active_height;
+    if (x < 0) x = 0;
+    if (y < 0) y = 0;
+    if (x2 > (int)active_width) x2 = (int)active_width;
+    if (y2 > (int)active_height) y2 = (int)active_height;
 
-    if (x < dirty_min_x) dirty_min_x = x; if (y < dirty_min_y) dirty_min_y = y;
-    if (x2 > dirty_max_x) dirty_max_x = x2; if (y2 > dirty_max_y) dirty_max_y = y2;
+    if (x < dirty_min_x) dirty_min_x = x;
+    if (y < dirty_min_y) dirty_min_y = y;
+    if (x2 > dirty_max_x) dirty_max_x = x2;
+    if (y2 > dirty_max_y) dirty_max_y = y2;
     dirty_active = 1;
 }
 
@@ -172,7 +176,10 @@ uint32_t gfx_get_height(void) { return (uint32_t)height; }
 
 void gfx_put_pixel(int x, int y, uint32_t color) {
     if (x < 0 || (size_t)x >= width || y < 0 || (size_t)y >= height) return;
-    if(x<0||(size_t)x>=active_width||y<0||(size_t)y>=active_height)return; active_buffer[(size_t)y * active_width + (size_t)x] = color; if(active_buffer==back_buffer) gfx_mark_dirty(x, y, 1, 1); return;
+    if(x<0||(size_t)x>=active_width||y<0||(size_t)y>=active_height) return;
+    active_buffer[(size_t)y * active_width + (size_t)x] = color;
+    if(active_buffer==back_buffer) gfx_mark_dirty(x, y, 1, 1);
+    return;
     gfx_mark_dirty(x, y, 1, 1);
 }
 

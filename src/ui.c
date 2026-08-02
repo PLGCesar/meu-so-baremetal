@@ -17,7 +17,7 @@
 #define MAX_WINDOWS 13
 
 typedef struct {
-    int id; int app_type; int x, y, w, h; int is_open; int z_index; 
+    int id; int app_type; int x, y, w, h; int is_open; int z_index; uint32_t* cache; 
 } window_t;
 
 static window_t windows[MAX_WINDOWS];
@@ -27,7 +27,7 @@ static int current_wallpaper = -1;
 static int bgif_wallpaper_frame = 0;
 
 static int start_menu_open = 0, gallery_photo = 0;
-static char gallery_status_msg[64] = "CLIQUE NOS BOTOES PARA ALTERAR WALLPAPER OU SALVAR!";
+
 
 static char input_buffer[32]; static int input_index = 0;
 static char shell_output[128] = "SISTEMA VFS & PLAYER DE VIDEO BGIF PRONTOS!";
@@ -465,8 +465,10 @@ void ui_handle_mouse(void) {
     if (click && dragging_window_id != -1) {
         window_t* w = &windows[dragging_window_id];
         w->x = mouse_x - drag_off_x; w->y = mouse_y - drag_off_y;
-        if (w->x < 0) w->x = 0; if (w->x + w->w > 1024) w->x = 1024 - w->w;
-        if (w->y < 0) w->y = 0; if (w->y + w->h > 728) w->y = 728 - w->h;
+        if (w->x < 0) w->x = 0;
+        if (w->x + w->w > 1024) w->x = 1024 - w->w;
+        if (w->y < 0) w->y = 0;
+        if (w->y + w->h > 728) w->y = 728 - w->h;
         ui_needs_redraw = 1;
     }
 
