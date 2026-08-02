@@ -17,7 +17,7 @@
 #define MAX_WINDOWS 13
 
 typedef struct {
-    int id; int app_type; int x, y, w, h; int is_open; int z_index; int anim_scale;
+    int id; int app_type; int x, y, w, h; int is_open; int z_index; 
 } window_t;
 
 static window_t windows[MAX_WINDOWS];
@@ -110,7 +110,7 @@ static void format_time_string(char* buf, uint8_t h, uint8_t m, uint8_t s) {
 
 void bring_to_front(int win_id) {
     top_z_index++; windows[win_id].z_index = top_z_index;
-    if (!windows[win_id].is_open) windows[win_id].anim_scale = 10;
+    
     windows[win_id].is_open = 1;
     ui_needs_redraw = 1;
 }
@@ -120,7 +120,44 @@ void ui_init(void) {
     kmemset(paint_canvas, 0, sizeof(paint_canvas));
     input_buffer[0] = '\0';
 
-    windows[0] = (window_t){0, 0, 240, 60,  640, 520, 0, 1, 100};
+    windows[0] = (window_t){0, 0, 240, 60,  640, 520, 0, 1, NULL};
+    windows[1] = (window_t){1, 1, 200, 80,  640, 520, 0, 2, NULL};
+    windows[2] = (window_t){2, 2, 160, 100, 640, 520, 0, 3, NULL};
+    windows[3] = (window_t){3, 3, 180, 50,  640, 540, 0, 4, NULL};
+    windows[4] = (window_t){4, 4, 260, 90,  580, 480, 0, 5, NULL};
+    windows[5] = (window_t){5, 5, 200, 60,  660, 500, 0, 6, NULL};
+    windows[6] = (window_t){6, 6, 130, 70,  600, 520, 0, 7, NULL};
+    windows[7] = (window_t){7, 7, 240, 100, 560, 420, 0, 8, NULL};
+    windows[8] = (window_t){8, 8, 150, 70,  580, 480, 0, 9, NULL};
+    windows[9] = (window_t){9, 9, 210, 80,  580, 500, 0, 10, NULL};
+    windows[10]= (window_t){10, 10, 300, 150, 200, 260, 0, 11, NULL};
+    windows[11]= (window_t){11, 11, 220, 100, 600, 480, 0, 12, NULL};
+    windows[12]= (window_t){12, 12, 180, 70,  620, 480, 0, 13, NULL};
+
+    for (int i = 0; i < MAX_WINDOWS; i++) {
+        window_t* w = &windows[i];
+        w->cache = kmalloc(w->w * w->h * sizeof(uint32_t));
+        gfx_set_target(w->cache, w->w, w->h);
+        gfx_draw_rect(0, 0, w->w, w->h, COLOR_GRAY);
+        gfx_draw_rect(0, 0, w->w, 30, COLOR_LIGHT_GRAY);
+        const char* title = "JANELA";
+        if (w->app_type == 0) title = "JANELA: TERMINAL SHELL VFS";
+        else if (w->app_type == 1) title = "JANELA: GERENCIADOR DE RAM";
+        else if (w->app_type == 2) title = "JANELA: DIAGNOSTICO REDE";
+        else if (w->app_type == 3) title = "JANELA: GALERIA & BMP";
+        else if (w->app_type == 4) title = "JANELA: PLAYER CHIPTUNE";
+        else if (w->app_type == 5) title = "JANELA: TAREFAS DA CPU";
+        else if (w->app_type == 6) title = "JANELA: PAINT STUDIO";
+        else if (w->app_type == 7) title = "JANELA: EXPLORADOR VFS";
+        else if (w->app_type == 8) title = "JANELA: JOGO SNAKE";
+        else if (w->app_type == 9) title = "JANELA: PLAYER DE VIDEO";
+        else if (w->app_type == 10) title = "JANELA: CALCULADORA";
+        else if (w->app_type == 11) title = "JANELA: LOGS & UPDATES";
+        else if (w->app_type == 12) title = "JANELA: CAPIVARAPAD";
+        gfx_draw_string(title, 15, 11, COLOR_WHITE);
+        gfx_draw_rect(w->w - 25, 7, 16, 16, COLOR_RED);
+    }
+    gfx_set_target(NULL, 0, 0);
     windows[1] = (window_t){1, 1, 200, 80,  640, 520, 0, 2, 100};
     windows[2] = (window_t){2, 2, 160, 100, 640, 520, 0, 3, 100};
     windows[3] = (window_t){3, 3, 180, 50,  640, 540, 0, 4, 100};
@@ -437,43 +474,11 @@ void ui_handle_mouse(void) {
 }
 
 void draw_single_window(window_t* w) {
-    if (!w->is_open) return; 
-
-    if (w->anim_scale < 100) {
-        w->anim_scale += 25;
-        if (w->anim_scale > 100) w->anim_scale = 100;
-        ui_needs_redraw = 1;
-    }
-
-    int base_w = w->w, base_h = w->h;
-    int cur_w = (base_w * w->anim_scale) / 100;
-    int cur_h = (base_h * w->anim_scale) / 100;
-    int win_x = w->x + (base_w - cur_w) / 2;
-    int win_y = w->y + (base_h - cur_h) / 2;
-    int win_w = cur_w;
-    int win_h = cur_h;
-
+    if (!w->is_open) return;
+    int win_x = w->x; int win_y = w->y; int win_w = w->w; int win_h = w->h;
     gfx_draw_rect_alpha(win_x + 8, win_y + 8, win_w, win_h, 0x000000, 100);
-    gfx_draw_rect(win_x, win_y, win_w, win_h, COLOR_GRAY);
-    gfx_draw_rect_alpha(win_x, win_y, win_w, 30, COLOR_LIGHT_GRAY, 210);
+    gfx_blit(w->cache, win_x, win_y, win_w, win_h);
 
-    if (w->app_type == 0) gfx_draw_string("JANELA: TERMINAL SHELL VFS", win_x + 15, win_y + 11, COLOR_WHITE);
-    else if (w->app_type == 1) gfx_draw_string("JANELA: GERENCIADOR DE MEMORIA RAM", win_x + 15, win_y + 11, COLOR_WHITE);
-    else if (w->app_type == 2) gfx_draw_string("JANELA: DIAGNOSTICO REDE RTL8139 & IDT", win_x + 15, win_y + 11, COLOR_WHITE);
-    else if (w->app_type == 3) gfx_draw_string("JANELA: GALERIA DE PAISAGENS & .BMP", win_x + 15, win_y + 11, COLOR_WHITE);
-    else if (w->app_type == 4) gfx_draw_string("JANELA: PLAYER DE MUSICA CHIPTUNE 8-BIT", win_x + 15, win_y + 11, COLOR_WHITE);
-    else if (w->app_type == 5) gfx_draw_string("JANELA: GERENCIADOR DE TAREFAS DA CPU", win_x + 15, win_y + 11, COLOR_WHITE);
-    else if (w->app_type == 6) gfx_draw_string("JANELA: PAINT STUDIO & EXPORTADOR BMP", win_x + 15, win_y + 11, COLOR_WHITE);
-    else if (w->app_type == 7) gfx_draw_string("JANELA: EXPLORADOR DE ARQUIVOS (NOTACAO #|)", win_x + 15, win_y + 11, COLOR_WHITE);
-    else if (w->app_type == 8) gfx_draw_string("JANELA: JOGO SNAKE EM RING 3 (SYSCALLS)", win_x + 15, win_y + 11, COLOR_WHITE);
-    else if (w->app_type == 9) gfx_draw_string("JANELA: PLAYER DE VIDEO (.BMP-GIF / BGIF)", win_x + 15, win_y + 11, COLOR_WHITE);
-    else if (w->app_type == 10) gfx_draw_string("JANELA: CALCULADORA BAREMETAL", win_x + 15, win_y + 11, COLOR_WHITE);
-    else if (w->app_type == 11) gfx_draw_string("JANELA: LOGS DE ATUALIZACAO & CHANGELOG", win_x + 15, win_y + 11, COLOR_WHITE);
-    else if (w->app_type == 12) gfx_draw_string("JANELA: CAPIVARAPAD - BLOCO DE NOTAS", win_x + 15, win_y + 11, COLOR_WHITE);
-
-    gfx_draw_rect(win_x + win_w - 25, win_y + 7, 16, 16, COLOR_RED);
-
-    if (w->anim_scale < 100) return;
 
     if (w->app_type == 0) {
         gfx_draw_string("TERMINAL SHELL VFS:", win_x + 30, win_y + 50, COLOR_GREEN);

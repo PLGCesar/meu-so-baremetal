@@ -21,6 +21,9 @@ void gfx_init(multiboot_info_t* mbi);
 uint32_t gfx_get_width(void);
 uint32_t gfx_get_height(void);
 
+void gfx_set_target(uint32_t* target, uint32_t w, uint32_t h);
+void gfx_blit(uint32_t* src, int dx, int dy, int w, int h);
+
 void gfx_put_pixel(int x, int y, uint32_t color);
 void gfx_put_pixel_alpha(int x, int y, uint32_t color, uint8_t alpha);
 void gfx_clear(uint32_t color);
@@ -29,14 +32,11 @@ void gfx_draw_rect_alpha(int x, int y, int width, int height, uint32_t color, ui
 void gfx_draw_char(char c, int x, int y, uint32_t color);
 void gfx_draw_string(const char* str, int x, int y, uint32_t color);
 void gfx_draw_number(int num, int x, int y, uint32_t color);
-
 void gfx_draw_number_64(uint64_t num, int x, int y, uint32_t color);
 void gfx_draw_hex_64(uint64_t val, int x, int y, uint32_t color);
-
 void gfx_draw_cursor(int x, int y);
 void gfx_swap_buffers(void);
 
-// SISTEMA DE REGIOES SUJAS (DIRTY RECTANGLES)
 void gfx_mark_dirty(int x, int y, int w, int h);
 void gfx_reset_dirty(void);
 int gfx_is_dirty(void);

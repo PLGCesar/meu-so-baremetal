@@ -82,7 +82,7 @@ void memory_init(multiboot_info_t* mbi) {
 }
 
 void* kmalloc(size_t size) {
-    if (size == 0) return NULL;
+    if (size == 0 || size > 1024 * 1024 * 128) return NULL;
 
     // Alinha tamanho util a multiplos de 16 bytes
     if (size % ALIGNMENT_64 != 0) {

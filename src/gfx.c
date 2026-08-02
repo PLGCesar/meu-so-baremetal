@@ -3,6 +3,9 @@
 #include "../include/klibc.h"
 
 static uint32_t* framebuffer = 0;
+static uint32_t* active_buffer = 0;
+static size_t active_width = 1024;
+static size_t active_height = 768;
 static uint32_t* back_buffer = 0;
 static size_t width = 1024;
 static size_t height = 768;
@@ -124,7 +127,7 @@ void gfx_mark_dirty(int x, int y, int w, int h) {
     if (w <= 0 || h <= 0) return;
     int x2 = x + w; int y2 = y + h;
     if (x < 0) x = 0; if (y < 0) y = 0;
-    if (x2 > (int)width) x2 = (int)width; if (y2 > (int)height) y2 = (int)height;
+    if (x2 > (int)active_width) x2 = (int)active_width; if (y2 > (int)active_height) y2 = (int)active_height;
 
     if (x < dirty_min_x) dirty_min_x = x; if (y < dirty_min_y) dirty_min_y = y;
     if (x2 > dirty_max_x) dirty_max_x = x2; if (y2 > dirty_max_y) dirty_max_y = y2;
@@ -132,7 +135,7 @@ void gfx_mark_dirty(int x, int y, int w, int h) {
 }
 
 void gfx_reset_dirty(void) {
-    dirty_min_x = (int)width; dirty_min_y = (int)height;
+    dirty_min_x = (int)active_width; dirty_min_y = (int)active_height;
     dirty_max_x = 0; dirty_max_y = 0;
     dirty_active = 0;
 }
@@ -161,7 +164,7 @@ void gfx_init(multiboot_info_t* mbi) {
     if (!framebuffer) framebuffer = (uint32_t*)0xFD000000;
 
     back_buffer = (uint32_t*)kmalloc(total_pixels_64 * sizeof(uint32_t));
-    gfx_reset_dirty();
+    active_buffer = back_buffer; active_width = width; active_height = height; gfx_reset_dirty();
 }
 
 uint32_t gfx_get_width(void) { return (uint32_t)width; }
@@ -169,7 +172,7 @@ uint32_t gfx_get_height(void) { return (uint32_t)height; }
 
 void gfx_put_pixel(int x, int y, uint32_t color) {
     if (x < 0 || (size_t)x >= width || y < 0 || (size_t)y >= height) return;
-    back_buffer[(size_t)y * width + (size_t)x] = color;
+    if(x<0||(size_t)x>=active_width||y<0||(size_t)y>=active_height)return; active_buffer[(size_t)y * active_width + (size_t)x] = color; if(active_buffer==back_buffer) gfx_mark_dirty(x, y, 1, 1); return;
     gfx_mark_dirty(x, y, 1, 1);
 }
 
@@ -197,11 +200,11 @@ void gfx_swap_buffers(void) {
     int bh = dirty_max_y - dirty_min_y;
 
     if (bw <= 0 || bh <= 0) {
-        gfx_reset_dirty();
+        active_buffer = back_buffer; active_width = width; active_height = height; gfx_reset_dirty();
         return;
     }
 
-    if (bw == (int)width && bh == (int)height) {
+    if (bw == (int)active_width && bh == (int)active_height) {
         fast_memcpy(framebuffer, back_buffer, total_pixels_64 * sizeof(uint32_t));
     } else {
         size_t line_bytes = (size_t)bw * sizeof(uint32_t);
@@ -212,7 +215,7 @@ void gfx_swap_buffers(void) {
         }
     }
 
-    gfx_reset_dirty();
+    active_buffer = back_buffer; active_width = width; active_height = height; gfx_reset_dirty();
 }
 
 void gfx_clear(uint32_t color) {
@@ -222,18 +225,18 @@ void gfx_clear(uint32_t color) {
     for (size_t i = 0; i < limit; i++) {
         b64[i] = c64;
     }
-    gfx_mark_dirty(0, 0, (int)width, (int)height);
+    gfx_mark_dirty(0, 0, (int)active_width, (int)active_height);
 }
 
 void gfx_draw_rect(int x, int y, int w, int h, uint32_t color) {
-    if (x >= (int)width || y >= (int)height || x + w <= 0 || y + h <= 0) return;
+    if (x >= (int)active_width || y >= (int)active_height || x + w <= 0 || y + h <= 0) return;
     
     int start_x = x < 0 ? 0 : x; int start_y = y < 0 ? 0 : y;
-    int end_x = x + w > (int)width ? (int)width : x + w;
-    int end_y = y + h > (int)height ? (int)height : y + h;
+    int end_x = x + w > (int)active_width ? (int)active_width : x + w;
+    int end_y = y + h > (int)active_height ? (int)active_height : y + h;
 
     for (int i = start_y; i < end_y; i++) {
-        uint32_t* row_ptr = back_buffer + (i * width);
+        uint32_t* row_ptr = active_buffer + (i * active_width);
         for (int j = start_x; j < end_x; j++) {
             row_ptr[j] = color;
         }
@@ -452,4 +455,29 @@ void gfx_draw_landscape_synthwave(int x, int y, int w, int h) {
         }
     }
     gfx_mark_dirty(x, y, w, h);
+}
+
+void gfx_set_target(uint32_t* target, uint32_t w, uint32_t h) {
+    if (target) {
+        active_buffer = target; active_width = w; active_height = h;
+    } else {
+        active_buffer = back_buffer; active_width = width; active_height = height;
+    }
+}
+
+void gfx_blit(uint32_t* src, int dx, int dy, int w, int h) {
+    if (!src || dx >= (int)active_width || dy >= (int)active_height || dx + w <= 0 || dy + h <= 0) return;
+    
+    int start_x = dx < 0 ? 0 : dx;
+    int start_y = dy < 0 ? 0 : dy;
+    int end_x = dx + w > (int)active_width ? (int)active_width : dx + w;
+    int end_y = dy + h > (int)active_height ? (int)active_height : dy + h;
+    
+    int copy_w = end_x - start_x;
+    for (int i = start_y; i < end_y; i++) {
+        int src_y = i - dy;
+        int src_x = start_x - dx;
+        fast_memcpy(active_buffer + (i * active_width + start_x), src + (src_y * w + src_x), copy_w * sizeof(uint32_t));
+    }
+    if (active_buffer == back_buffer) gfx_mark_dirty(start_x, start_y, copy_w, end_y - start_y);
 }
