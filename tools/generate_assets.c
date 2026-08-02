@@ -25,13 +25,14 @@ static void create_default_bmp(const char* filename, int icon_type) {
     int pixel_bytes = row_size * ICON_SIZE;
     int file_size = 54 + pixel_bytes;
 
-    bmp_fh_t fh = { 0x4D42, file_size, 0, 0, 54 };
-    bmp_ih_t ih = { 40, ICON_SIZE, ICON_SIZE, 1, 24, 0, pixel_bytes, 2835, 2835, 0, 0 };
+    bmp_fh_t fh = { 0x4D42, (uint32_t)file_size, 0, 0, 54 };
+    bmp_ih_t ih = { 40, ICON_SIZE, ICON_SIZE, 1, 24, 0, (uint32_t)pixel_bytes, 2835, 2835, 0, 0 };
 
     fwrite(&fh, sizeof(fh), 1, f);
     fwrite(&ih, sizeof(ih), 1, f);
 
     uint8_t* pixels = (uint8_t*)calloc(1, pixel_bytes);
+    if (!pixels) { fclose(f); return; }
 
     // Cores base por tipo de app
     uint8_t r = 100, g = 100, b = 255;
@@ -50,7 +51,6 @@ static void create_default_bmp(const char* filename, int icon_type) {
             if (x == 0 || x == ICON_SIZE - 1 || y == 0 || y == ICON_SIZE - 1) {
                 pixels[idx] = 255; pixels[idx+1] = 255; pixels[idx+2] = 255;
             } else if (x >= 4 && x <= ICON_SIZE - 5 && y >= 4 && y <= ICON_SIZE - 5) {
-                // Desenho interno
                 pixels[idx] = b; pixels[idx+1] = g; pixels[idx+2] = r;
             } else {
                 // Fundo magenta transparente (0xFF00FF)
@@ -75,6 +75,15 @@ int main(void) {
     FILE* h_out = fopen("include/bmp_assets.h", "w");
     FILE* c_out = fopen("src/bmp_assets.c", "w");
 
+    if (!asm_out || !h_out || !c_out) {
+        printf("Erro ao abrir arquivos de destino para escrita!\n");
+        if (txt) fclose(txt);
+        if (asm_out) fclose(asm_out);
+        if (h_out) fclose(h_out);
+        if (c_out) fclose(c_out);
+        return 1;
+    }
+
     fprintf(asm_out, ".section .rodata\n");
     fprintf(h_out, "#ifndef BMP_ASSETS_H\n#define BMP_ASSETS_H\n#include <stddef.h>\n#include <stdint.h>\n\n");
     fprintf(h_out, "typedef struct {\n    const char* name;\n    const uint8_t* start;\n    const uint8_t* end;\n} embedded_asset_t;\n\n");
@@ -87,22 +96,24 @@ int main(void) {
     char syms[64][64];
     int count = 0;
 
-    while (fgets(line, sizeof(line), txt)) {
-        // Clear newline
+    while (fgets(line, sizeof(line), txt) && count < 64) {
         char* p = strchr(line, '\r'); if (p) *p = 0;
         p = strchr(line, '\n'); if (p) *p = 0;
         if (strlen(line) == 0) continue;
 
-        strcpy(names[count], line);
+        strncpy(names[count], line, 63);
+        names[count][63] = '\0';
 
-        // Sanitize symbol name
         char sym[64];
         int j = 0;
-        for (int i = 0; line[i]; i++) {
-            if (line[i] >= 'a' && line[i] <= 'z') sym[j++] = line[i];
-            else if (line[i] >= 'A' && line[i] <= 'Z') sym[j++] = line[i];
-            else if (line[i] >= '0' && line[i] <= '9') sym[j++] = line[i];
-            else sym[j++] = '_';
+        for (int i = 0; line[i] && j < 63; i++) {
+            if ((line[i] >= 'a' && line[i] <= 'z') ||
+                (line[i] >= 'A' && line[i] <= 'Z') ||
+                (line[i] >= '0' && line[i] <= '9')) {
+                sym[j++] = line[i];
+            } else {
+                sym[j++] = '_';
+            }
         }
         sym[j] = '\0';
         strcpy(syms[count], sym);
@@ -122,7 +133,8 @@ int main(void) {
 
     fprintf(c_out, "\nconst embedded_asset_t g_embedded_assets[] = {\n");
     for (int i = 0; i < count; i++) {
-        fprintf(c_out, "    { \"%s\", asset_%s_start, asset_%s_end },\n", names[i], syms[i]);
+        // CORRECAO CRITICA: Passa os 3 argumentos esperados pelos 3 marcadores %s da string de formato
+        fprintf(c_out, "    { \"%s\", asset_%s_start, asset_%s_end },\n", names[i], syms[i], syms[i]);
     }
     fprintf(c_out, "};\n\nconst size_t g_embedded_assets_count = %d;\n", count);
 
