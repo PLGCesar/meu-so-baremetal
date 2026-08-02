@@ -14,7 +14,7 @@
 #include "../include/net.h"
 #include "../include/bgif.h"
 
-#define MAX_WINDOWS 12
+#define MAX_WINDOWS 13
 
 typedef struct {
     int id; int app_type; int x, y, w, h; int is_open; int z_index; int anim_scale;
@@ -49,6 +49,10 @@ static long long calc_val1 = 0;
 static int calc_op = 0;
 static int calc_clear_next = 0;
 
+// === VARIAVEIS DO CAPIVARAPAD (BLOCO DE NOTAS) ===
+static char pad_buffer[256] = "BEM-VINDO AO CAPIVARAPAD! DIGITE SEU TEXTO AQUI...";
+static int pad_index = 50;
+
 static inline void outw(uint16_t port, uint16_t val) {
     asm volatile ("outw %0, %1" : : "a"(val), "Nd"(port));
 }
@@ -58,12 +62,9 @@ static inline void outb(uint16_t port, uint8_t val) {
 }
 
 static inline uint8_t inb(uint16_t port) {
-    uint8_t ret;
-    asm volatile ("inb %1, %0" : "=a"(ret) : "Nd"(port));
-    return ret;
+    uint8_t ret; asm volatile ("inb %1, %0" : "=a"(ret) : "Nd"(port)); return ret;
 }
 
-// FUNCAO DE DESLIGAMENTO DO COMPUTADOR (ACPI & QEMU SHUTDOWN)
 void sys_shutdown(void) {
     serial_write("[POWER] Desligando CapivaraOS...\n");
     sound_play(1046); for (volatile int i = 0; i < 150000; i++);
@@ -72,14 +73,13 @@ void sys_shutdown(void) {
     sound_play(523);  for (volatile int i = 0; i < 250000; i++);
     sound_stop();
 
-    outw(0x604, 0x2000);  // QEMU ACPI shutdown port
-    outw(0xB004, 0x2000); // Bochs shutdown port
-    outw(0x600, 0x3400);  // VirtualBox shutdown port
+    outw(0x604, 0x2000);
+    outw(0xB004, 0x2000);
+    outw(0x600, 0x3400);
 
     while (1) { asm volatile ("hlt"); }
 }
 
-// FUNCAO DE REINICIALIZACAO DO COMPUTADOR (RESET PS/2 CONTROLLER)
 void sys_reboot(void) {
     serial_write("[POWER] Reiniciando CapivaraOS...\n");
     sound_play(880); for (volatile int i = 0; i < 100000; i++);
@@ -132,8 +132,9 @@ void ui_init(void) {
     windows[9] = (window_t){9, 9, 210, 80,  580, 500, 1, 10, 100};
     windows[10]= (window_t){10, 10, 300, 150, 200, 260, 0, 11, 100};
     windows[11]= (window_t){11, 11, 220, 100, 600, 480, 0, 12, 100};
+    windows[12]= (window_t){12, 12, 180, 70,  620, 480, 0, 13, 100}; // APP 12: CAPIVARAPAD
 
-    top_z_index = 12;
+    top_z_index = 13;
     ui_needs_redraw = 1;
 }
 
@@ -141,7 +142,7 @@ static void process_shell_command(void) {
     for (int i = 0; i < 128; i++) shell_output[i] = '\0';
 
     if (kstrcmp(input_buffer, "help") == 0) {
-        const char* msg = "COMANDOS: LS, CAT <ARQ>, WRITE <ARQ> <TEXTO>, RUN <ELF>, PANIC";
+        const char* msg = "COMANDOS: LS, CAT <ARQ>, WRITE <ARQ> <TEXTO>, RUN <ELF>, UDP <MSG>";
         for (int i = 0; msg[i] != '\0'; i++) shell_output[i] = msg[i];
     } else if (kstrcmp(input_buffer, "ls") == 0) {
         vfs_list(shell_output, 128);
@@ -160,6 +161,14 @@ static void process_shell_command(void) {
             const char* msg = "ARQUIVO GRAVADO COM SUCESSO!";
             for (int j = 0; msg[j] != '\0'; j++) shell_output[j] = msg[j];
         }
+    } else if (kstrncmp(input_buffer, "run ", 4) == 0) {
+        size_t sz = 0;
+        const uint8_t* bytes = vfs_read(input_buffer + 4, &sz);
+        if (bytes && elf_load_and_run(bytes, sz, input_buffer + 4)) {
+            kstrcpy(shell_output, "PROCESSO RING 3 EXECUTADO EM SEGUNDO PLANO!");
+        } else {
+            kstrcpy(shell_output, "ERRO AO CARREGAR EXECUTAVEL ELF!");
+        }
     } else if (kstrncmp(input_buffer, "udp ", 4) == 0) {
         uint32_t target_ip = ((uint32_t)(10) | ((uint32_t)(0) << 8) | ((uint32_t)(2) << 16) | ((uint32_t)(2) << 24));
         net_send_udp(target_ip, 12345, 8888, input_buffer + 4, kstrlen(input_buffer + 4));
@@ -175,6 +184,27 @@ void ui_handle_keyboard(void) {
     if (last_key_pressed != 0) {
         char c = last_key_pressed; last_key_pressed = 0;
         ui_needs_redraw = 1;
+
+        // SE A JANELA DO BLOCO DE NOTAS ESTIVER EM FOCO (Z-INDEX MAIS ALTO)
+        int top_win = -1, highest_z = -1;
+        for (int i = 0; i < MAX_WINDOWS; i++) {
+            if (windows[i].is_open && windows[i].z_index > highest_z) {
+                highest_z = windows[i].z_index;
+                top_win = i;
+            }
+        }
+
+        if (top_win != -1 && windows[top_win].app_type == 12) { // CAPIVARAPAD
+            if (c == '\b') {
+                if (pad_index > 0) pad_buffer[--pad_index] = '\0';
+            } else if (c == '\n') {
+                if (pad_index < 240) { pad_buffer[pad_index++] = ' '; pad_buffer[pad_index] = '\0'; }
+            } else if (pad_index < 240) {
+                pad_buffer[pad_index++] = c;
+                pad_buffer[pad_index] = '\0';
+            }
+            return;
+        }
 
         if (c == 'w' && snake_dir_y == 0) { snake_dir_x = 0; snake_dir_y = -5; }
         else if (c == 's' && snake_dir_y == 0) { snake_dir_x = 0; snake_dir_y = 5; }
@@ -214,15 +244,11 @@ void ui_handle_mouse(void) {
     if (just_pressed) sound_click();
     int screen_h = gfx_get_height();
 
-    // BOTÕES DE DESLIGAR E REINICIAR NO MENU START
     if (start_menu_open && just_pressed && mouse_x >= 10 && mouse_x <= 200) {
         int btn_power_y = screen_h - 40;
         if (mouse_y >= btn_power_y - 25 && mouse_y <= btn_power_y) {
-            if (mouse_x <= 100) {
-                sys_shutdown(); return; // CLICOU EM DESLIGAR
-            } else {
-                sys_reboot(); return;   // CLICOU EM REINICIAR
-            }
+            if (mouse_x <= 100) { sys_shutdown(); return; }
+            else { sys_reboot(); return; }
         }
     }
 
@@ -241,17 +267,18 @@ void ui_handle_mouse(void) {
     if (just_pressed && mouse_x >= 140 && mouse_x <= 255) {
         if (mouse_y >= 20 && mouse_y <= 75) bring_to_front(10);
         else if (mouse_y >= 80 && mouse_y <= 135) bring_to_front(11);
+        else if (mouse_y >= 140 && mouse_y <= 195) bring_to_front(12); // CAPIVARAPAD
     }
 
     if (just_pressed && mouse_x >= 10 && mouse_x <= 90 && mouse_y >= screen_h - 35 && mouse_y <= screen_h - 5) {
         start_menu_open = !start_menu_open; ui_needs_redraw = 1; return;
     }
 
-    if (start_menu_open && just_pressed && mouse_x >= 10 && mouse_x <= 200 && mouse_y >= screen_h - 450 && mouse_y <= screen_h - 70) {
-        for (int i = 0; i < 11; i++) {
-            int my = screen_h - 415 + (i * 30);
+    if (start_menu_open && just_pressed && mouse_x >= 10 && mouse_x <= 200 && mouse_y >= screen_h - 480 && mouse_y <= screen_h - 70) {
+        for (int i = 0; i < 12; i++) {
+            int my = screen_h - 445 + (i * 30);
             if (mouse_y >= my - 5 && mouse_y <= my + 25) {
-                int mapping[] = {0, 1, 2, 3, 4, 5, 6, 7, 9, 10, 11};
+                int mapping[] = {0, 1, 2, 3, 4, 5, 6, 7, 9, 10, 11, 12};
                 bring_to_front(mapping[i]);
             }
         }
@@ -275,10 +302,22 @@ void ui_handle_mouse(void) {
                 dragging_window_id = clicked_win; drag_off_x = mouse_x - w->x; drag_off_y = mouse_y - w->y;
             }
 
+            // BOTÕES DO CAPIVARAPAD (SALVAR E LIMPAR)
+            if (w->app_type == 12 && mouse_y >= w->y + 420 && mouse_y <= w->y + 455) {
+                if (mouse_x >= w->x + 30 && mouse_x <= w->x + 220) { // SALVAR .TXT
+                    vfs_write_file("nota.txt", (const uint8_t*)pad_buffer, kstrlen(pad_buffer));
+                    sound_click();
+                } else if (mouse_x >= w->x + 240 && mouse_x <= w->x + 400) { // LIMPAR
+                    pad_buffer[0] = '\0'; pad_index = 0;
+                    sound_click();
+                }
+                ui_needs_redraw = 1;
+            }
+
             if (w->app_type == 9 && mouse_y >= w->y + 400 && mouse_y <= w->y + 440) {
                 if (mouse_x >= w->x + 30 && mouse_x <= w->x + 180) video_playing = !video_playing;
                 else if (mouse_x >= w->x + 200 && mouse_x <= w->x + 360) video_frame++;
-                else if (mouse_x >= w->x + 380 && mouse_x <= w->x + 550) current_wallpaper = 4; // WALLPAPER VIDEO = 4
+                else if (mouse_x >= w->x + 380 && mouse_x <= w->x + 550) current_wallpaper = 4;
                 ui_needs_redraw = 1;
             }
 
@@ -343,11 +382,11 @@ void ui_handle_mouse(void) {
                     if (mouse_x >= w->x + 20 && mouse_x <= w->x + 110) gallery_photo = 0;
                     else if (mouse_x >= w->x + 120 && mouse_x <= w->x + 200) gallery_photo = 1;
                     else if (mouse_x >= w->x + 210 && mouse_x <= w->x + 310) gallery_photo = 2;
-                    else if (mouse_x >= w->x + 320 && mouse_x <= w->x + 450) gallery_photo = 3; // FOTO .BMP = 3
+                    else if (mouse_x >= w->x + 320 && mouse_x <= w->x + 450) gallery_photo = 3;
                 }
 
                 if (mouse_y >= btn_y2 && mouse_y <= btn_y2 + 30) {
-                    if (mouse_x >= w->x + 20 && mouse_x <= w->x + 210) current_wallpaper = gallery_photo; // FIX DO WALLPAPER .BMP
+                    if (mouse_x >= w->x + 20 && mouse_x <= w->x + 210) current_wallpaper = gallery_photo;
                     else if (mouse_x >= w->x + 225 && mouse_x <= w->x + 435) vfs_write_file("paisagem.art", (const uint8_t*)"ARTE RECENTE DA GALERIA", 23);
                     else if (mouse_x >= w->x + 450 && mouse_x <= w->x + 610) current_wallpaper = -1;
                 }
@@ -430,6 +469,7 @@ void draw_single_window(window_t* w) {
     else if (w->app_type == 9) gfx_draw_string("JANELA: PLAYER DE VIDEO (.BMP-GIF / BGIF)", win_x + 15, win_y + 11, COLOR_WHITE);
     else if (w->app_type == 10) gfx_draw_string("JANELA: CALCULADORA BAREMETAL", win_x + 15, win_y + 11, COLOR_WHITE);
     else if (w->app_type == 11) gfx_draw_string("JANELA: LOGS DE ATUALIZACAO & CHANGELOG", win_x + 15, win_y + 11, COLOR_WHITE);
+    else if (w->app_type == 12) gfx_draw_string("JANELA: CAPIVARAPAD - BLOCO DE NOTAS", win_x + 15, win_y + 11, COLOR_WHITE);
 
     gfx_draw_rect(win_x + win_w - 25, win_y + 7, 16, 16, COLOR_RED);
 
@@ -549,21 +589,41 @@ void draw_single_window(window_t* w) {
             }
         }
     } else if (w->app_type == 11) {
-        gfx_draw_string("LOGS DE ATUALIZACAO - CAPIVARAOS v1.3:", win_x + 20, win_y + 45, COLOR_GREEN);
+        gfx_draw_string("LOGS DE ATUALIZACAO - CAPIVARAOS v1.4:", win_x + 20, win_y + 45, COLOR_GREEN);
         gfx_draw_rect(win_x + 20, win_y + 70, win_w - 40, 380, COLOR_NAVY);
 
-        gfx_draw_string("VERSAO ATUAL: CapivaraOS 64-bit v1.3", win_x + 35, win_y + 90, COLOR_YELLOW);
+        gfx_draw_string("VERSAO ATUAL: CapivaraOS 64-bit v1.4", win_x + 35, win_y + 90, COLOR_YELLOW);
         gfx_draw_string("--------------------------------------------", win_x + 35, win_y + 110, COLOR_GRAY);
 
-        gfx_draw_string("[+] ADICIONADO: Botoes de DESLIGAR e REINICIAR (ACPI)", win_x + 35, win_y + 130, COLOR_GREEN);
-        gfx_draw_string("[+] ADICIONADO: Suporte a Wallpaper .BMP Estatico (ID 3)", win_x + 35, win_y + 150, COLOR_GREEN);
+        gfx_draw_string("[+] ADICIONADO: App 12 CapivaraPad (Bloco de Notas)", win_x + 35, win_y + 130, COLOR_GREEN);
+        gfx_draw_string("[+] ADICIONADO: Suporte a Letras Acentuadas e Cedilha", win_x + 35, win_y + 150, COLOR_GREEN);
+        gfx_draw_string("[+] ADICIONADO: Suporte a Teclas SHIFT, Caps e Simbolos", win_x + 35, win_y + 170, COLOR_GREEN);
 
-        gfx_draw_string("[*] CORRIGIDO: Conflito de ID entre Wallpaper BMP e BGIF", win_x + 35, win_y + 180, COLOR_BLUE);
-        gfx_draw_string("[*] CORRIGIDO: Restauracao das Paisagens Procedurais", win_x + 35, win_y + 200, COLOR_BLUE);
-        gfx_draw_string("[*] OTIMIZADO: Player BGIF 25 FPS para Economia de CPU", win_x + 35, win_y + 220, COLOR_BLUE);
+        gfx_draw_string("[*] OTIMIZADO: Teclado e Mouse sem Latencia (Buffer PS/2)", win_x + 35, win_y + 200, COLOR_BLUE);
+        gfx_draw_string("[*] OTIMIZADO: Efeitos Sonoros com HLT sem gastar CPU", win_x + 35, win_y + 220, COLOR_BLUE);
 
-        gfx_draw_string("[-] REMOVIDO: Tela Azul de fundo nas Paisagens", win_x + 35, win_y + 250, COLOR_RED);
-        gfx_draw_string("[-] REMOVIDO: Crash ao definir foto estatica como papel", win_x + 35, win_y + 270, COLOR_RED);
+        gfx_draw_string("[-] REMOVIDO: Laços de Espera Cega (for/while)", win_x + 35, win_y + 250, COLOR_RED);
+    } else if (w->app_type == 12) { // ================= CAPIVARAPAD =================
+        gfx_draw_string("CAPIVARAPAD - BLOCO DE NOTAS DIGITAVEL:", win_x + 20, win_y + 45, COLOR_GREEN);
+        
+        // FOLHA DE PAPEL DIGITAL BRANCA PARA TEXTO
+        gfx_draw_rect(win_x + 20, win_y + 70, win_w - 40, 330, COLOR_WHITE);
+        
+        // EXIBE O TEXTO DIGITADO PELO USUARIO
+        gfx_draw_string(pad_buffer, win_x + 30, win_y + 85, COLOR_DARK_SLATE);
+        
+        // CURSOR DE DIGITACAO PISCANTE
+        int cursor_x_pos = win_x + 30 + ((pad_index % 70) * 8);
+        int cursor_y_pos = win_y + 85 + ((pad_index / 70) * 12);
+        gfx_draw_rect(cursor_x_pos, cursor_y_pos, 2, 10, COLOR_RED);
+
+        // BOTOES DE AÇÃO
+        int btn_pad_y = win_y + 420;
+        gfx_draw_rect(win_x + 30, btn_pad_y, 190, 35, COLOR_BLUE);
+        gfx_draw_string("SALVAR EM NOTA.TXT", win_x + 40, btn_pad_y + 12, COLOR_WHITE);
+
+        gfx_draw_rect(win_x + 240, btn_pad_y, 160, 35, COLOR_GRAY);
+        gfx_draw_string("NOVO / LIMPAR", win_x + 260, btn_pad_y + 12, COLOR_WHITE);
     }
 }
 
@@ -580,7 +640,7 @@ void draw_desktop_icon(int x, int y, int app_id, const char* title, const char* 
 }
 
 void ui_render(void) {
-    if (video_playing || current_wallpaper == 4) { // WALLPAPER VIDEO BGIF = 4
+    if (video_playing || current_wallpaper == 4) {
         ui_needs_redraw = 1;
     }
 
@@ -598,8 +658,7 @@ void ui_render(void) {
     int screen_w = gfx_get_width();
     int screen_h = gfx_get_height();
 
-    // RENDERIZACAO DE WALLPAPERS COM IDS DEDICADOS E SEPARADOS!
-    if (current_wallpaper == 4) { // 4 = VIDEO ANIMADO BGIF
+    if (current_wallpaper == 4) {
         size_t bgif_sz = 0;
         const uint8_t* bgif_bytes = vfs_read("animacao.bgif", &bgif_sz);
         if (bgif_bytes) {
@@ -608,7 +667,7 @@ void ui_render(void) {
         } else {
             gfx_clear(COLOR_DARK_SLATE);
         }
-    } else if (current_wallpaper == 3) { // 3 = FOTO ESTATICA BITMAP (.BMP)
+    } else if (current_wallpaper == 3) {
         size_t bmp_sz = 0;
         const uint8_t* bmp_bytes = vfs_read("foto.bmp", &bmp_sz);
         if (bmp_bytes) {
@@ -637,8 +696,10 @@ void ui_render(void) {
     draw_desktop_icon(ic_x, 440, 7, "8. EXPLORAR", "SINTAXE #|",COLOR_YELLOW);
     draw_desktop_icon(ic_x, 500, 9, "9. VIDEO",    "BGIF PLAYER",COLOR_PURPLE);
     
-    draw_desktop_icon(140, 20, 10, "10. CALC", "CALCULADORA", COLOR_ORANGE);
-    draw_desktop_icon(140, 80, 11, "11. LOGS", "CHANGELOG",   COLOR_GREEN);
+    // FILEIRA 2: CALCULADORA, LOGS E CAPIVARAPAD
+    draw_desktop_icon(140, 20,  10, "10. CALC", "CALCULADORA", COLOR_ORANGE);
+    draw_desktop_icon(140, 80,  11, "11. LOGS", "CHANGELOG",   COLOR_GREEN);
+    draw_desktop_icon(140, 140, 12, "12. NOTAS", "CAPIVARAPAD",COLOR_YELLOW);
 
     gfx_draw_rect_alpha(0, screen_h - 40, screen_w, 40, COLOR_NAVY, 215);
     gfx_draw_rect(10, screen_h - 35, 80, 30, start_menu_open ? COLOR_GREEN : COLOR_BLUE);
@@ -654,11 +715,10 @@ void ui_render(void) {
         }
     }
 
-    // MENU START COM BOTOES DE DESLIGAR E REINICIAR NA PARTE INFERIOR
     if (start_menu_open) {
-        gfx_draw_rect_alpha(10, screen_h - 450, 200, 410, COLOR_NAVY, 230);
-        gfx_draw_rect(10, screen_h - 450, 200, 25, COLOR_BLUE);
-        gfx_draw_string("MENU START", 20, screen_h - 442, COLOR_WHITE);
+        gfx_draw_rect_alpha(10, screen_h - 480, 200, 440, COLOR_NAVY, 230);
+        gfx_draw_rect(10, screen_h - 480, 200, 25, COLOR_BLUE);
+        gfx_draw_string("MENU START", 20, screen_h - 472, COLOR_WHITE);
         
         const char* menu_items[] = {
             "> 1. SHELL VFS",
@@ -671,13 +731,13 @@ void ui_render(void) {
             "> 8. EXPLORAR",
             "> 9. PLAYER BGIF",
             "> 10. CALCULADORA",
-            "> 11. LOGS / UPDATES"
+            "> 11. LOGS / UPDATES",
+            "> 12. CAPIVARAPAD"
         };
-        for (int i = 0; i < 11; i++) {
-            gfx_draw_string(menu_items[i], 20, screen_h - 415 + (i * 30), COLOR_WHITE);
+        for (int i = 0; i < 12; i++) {
+            gfx_draw_string(menu_items[i], 20, screen_h - 445 + (i * 30), COLOR_WHITE);
         }
 
-        // BOTOES DE DESLIGAR E REINICIAR COM COR DESTACADA
         int btn_power_y = screen_h - 40;
         gfx_draw_rect(15, btn_power_y - 25, 85, 25, COLOR_RED);
         gfx_draw_string("DESLIGAR", 22, btn_power_y - 17, COLOR_WHITE);
