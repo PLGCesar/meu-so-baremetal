@@ -1,6 +1,9 @@
 FROM ubuntu:22.04
 
-RUN apt-get update && apt-get install -y gcc gcc-multilib build-essential xorriso grub-pc-bin grub-common
+# ISSO EVITA QUE O GITHUB ACTIONS FIQUE TRAVADO ESPERANDO INPUT DE FUSO HORÁRIO!
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y tzdata gcc gcc-multilib build-essential xorriso grub-pc-bin grub-common
 
 WORKDIR /os
 ENV CFLAGS="-m64 -Iinclude -ffreestanding -mno-red-zone -fno-pie -fno-pic -O3 -flto -march=x86-64 -msse2 -mno-avx -fomit-frame-pointer -fno-strict-aliasing -Wall -Wextra"

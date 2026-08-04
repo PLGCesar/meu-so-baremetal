@@ -11,6 +11,7 @@ static size_t total_free = 0;
 static size_t block_count = 0;
 
 void kmemset128_zero(void* dest, size_t count_16) {
+    if (!dest || count_16 == 0) return; // CRÍTICO: Previne o GCC LTO de travar em loop de otimização!
     __asm__ volatile (
         "pxor %%xmm0, %%xmm0\n\t"
         "1:\n\t movdqu %%xmm0, (%0)\n\t add $16, %0\n\t dec %1\n\t jnz 1b"
@@ -19,6 +20,7 @@ void kmemset128_zero(void* dest, size_t count_16) {
 }
 
 void kmemcpy128(void* dest, const void* src, size_t count_16) {
+    if (!dest || !src || count_16 == 0) return;
     __asm__ volatile (
         "1:\n\t movdqu (%1), %%xmm0\n\t movdqu %%xmm0, (%0)\n\t"
         "add $16, %0\n\t add $16, %1\n\t dec %2\n\t jnz 1b"
@@ -27,6 +29,7 @@ void kmemcpy128(void* dest, const void* src, size_t count_16) {
 }
 
 void kmemset128_color(void* dest, uint32_t color, size_t count_16) {
+    if (!dest || count_16 == 0) return;
     uint32_t c_buf[4] __attribute__((aligned(16))) = { color, color, color, color };
     __asm__ volatile (
         "movdqa (%2), %%xmm0\n\t"
