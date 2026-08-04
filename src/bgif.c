@@ -1,120 +1,110 @@
 #include "../include/bgif.h"
+#include "../include/gfx.h"
 
-/*
- * Linear fixed-point RGB color interpolation (Anti-Flicker / Smooth Color Transitions)
- * Prevents abrupt color shifts ("não mudar muito a cor") between sequential delta updates.
- * Freestanding integer math: zero floats, safe against underflow/overflow.
- */
-static inline uint32_t bgif_blend_rgb(uint32_t current_color, uint32_t new_color, uint8_t blend_factor) {
-    if (blend_factor == 255) return new_color;
-    if (blend_factor == 0)   return current_color;
+#define DELTA_THRESHOLD 12
 
-    uint32_t r_cur = (current_color >> 16) & 0xFF;
-    uint32_t g_cur = (current_color >> 8)  & 0xFF;
-    uint32_t b_cur = current_color & 0xFF;
+static int last_drawn_frame = -1;
 
-    uint32_t r_new = (new_color >> 16) & 0xFF;
-    uint32_t g_new = (new_color >> 8)  & 0xFF;
-    uint32_t b_new = new_color & 0xFF;
-
-    int32_t r_diff = (int32_t)r_new - (int32_t)r_cur;
-    int32_t g_diff = (int32_t)g_new - (int32_t)g_cur;
-    int32_t b_diff = (int32_t)b_new - (int32_t)b_cur;
-
-    uint32_t r_out = (uint32_t)((int32_t)r_cur + ((r_diff * blend_factor) >> 8));
-    uint32_t g_out = (uint32_t)((int32_t)g_cur + ((g_diff * blend_factor) >> 8));
-    uint32_t b_out = (uint32_t)((int32_t)b_cur + ((b_diff * blend_factor) >> 8));
-
-    return (current_color & 0xFF000000) | ((r_out & 0xFF) << 16) | ((g_out & 0xFF) << 8) | (b_out & 0xFF);
+void bgif_reset_delta_cache(void) {
+    last_drawn_frame = -1;
 }
 
-int bgif_validate_header(const bgif_header_t *hdr, size_t data_len) {
-    if (!hdr) {
-        return BGIF_ERR_NULL_POINTER;
-    }
-    if (data_len < sizeof(bgif_header_t)) {
-        return BGIF_ERR_BUFFER_OVERFLOW;
-    }
-    if (hdr->magic != BGIF_MAGIC) {
-        return BGIF_ERR_INVALID_MAGIC;
-    }
-    if (hdr->width == 0 || hdr->height == 0) {
-        return BGIF_ERR_INVALID_SIZE;
+int bgif_draw_frame(const uint8_t* bgif_data, size_t file_size, int frame_idx, int dest_x, int dest_y, int max_w, int max_h) {
+    if (!bgif_data || file_size < sizeof(bgif_header_t)) return 0;
+
+    bgif_header_t* header = (bgif_header_t*)bgif_data;
+    if (header->magic[0] != 'B' || header->magic[1] != 'G' ||
+        header->magic[2] != 'I' || header->magic[3] != 'F') {
+        return 0;
     }
 
-    return BGIF_OK;
-}
+    int total_frames = header->frame_count;
+    if (total_frames <= 0) return 0;
 
-int bgif_render_delta_frame(
-    const bgif_render_target_t *target,
-    uint16_t pos_x,
-    uint16_t pos_y,
-    const bgif_header_t *bgif_hdr,
-    const bgif_frame_header_t *frame_hdr,
-    const bgif_delta_pixel_t *deltas,
-    size_t available_bytes,
-    uint8_t blend_factor
-) {
-    // Null pointer verification
-    if (!target || !target->base_addr || !bgif_hdr || !frame_hdr || !deltas) {
-        return BGIF_ERR_NULL_POINTER;
-    }
+    int current_frame = frame_idx % total_frames;
+    uint32_t frame_offset = sizeof(bgif_header_t) + (current_frame * header->frame_size);
 
-    // Arithmetic overflow protection on total width/height position calculations
-    uint32_t target_max_x = (uint32_t)pos_x + bgif_hdr->width;
-    uint32_t target_max_y = (uint32_t)pos_y + bgif_hdr->height;
+    if (frame_offset + header->frame_size > file_size) return 0;
 
-    if (target_max_x > target->screen_width || target_max_y > target->screen_height) {
-        return BGIF_ERR_OUT_OF_BOUNDS;
-    }
+    const uint8_t* frame_pixels = bgif_data + frame_offset;
+    int w = header->width;
+    int h = header->height;
 
-    // Multiplication overflow prevention when checking buffer payload bounds
-    uint64_t required_bytes = (uint64_t)frame_hdr->delta_count * sizeof(bgif_delta_pixel_t);
-    if (required_bytes > available_bytes) {
-        return BGIF_ERR_BUFFER_OVERFLOW;
-    }
+    if (max_w <= 0 || max_h <= 0 || w <= 0 || h <= 0) return 0;
 
-    const uint32_t flags = bgif_hdr->flags;
-    const uint32_t trans_key = bgif_hdr->transparent_key;
-    const uint32_t pitch = target->pitch_pixels;
-    uint32_t *fb = target->base_addr;
+    uint32_t screen_w = gfx_get_width();
+    uint32_t screen_h = gfx_get_height();
 
-    // Delta-only processing loop (avoiding full-frame repaints)
-    for (uint32_t i = 0; i < frame_hdr->delta_count; ++i) {
-        const bgif_delta_pixel_t delta = deltas[i];
+    if (dest_x >= (int)screen_w || dest_y >= (int)screen_h) return total_frames;
 
-        // Bounds validation per delta coordinate to prevent heap/stack buffer corruption
-        if (delta.x >= bgif_hdr->width || delta.y >= bgif_hdr->height) {
-            continue;
+    int draw_w = max_w;
+    int draw_h = max_h;
+    if (dest_x + draw_w > (int)screen_w) draw_w = (int)screen_w - dest_x;
+    if (dest_y + draw_h > (int)screen_h) draw_h = (int)screen_h - dest_y;
+
+    if (draw_w <= 0 || draw_h <= 0) return total_frames;
+
+    uint32_t step_x = ((uint32_t)w << 16) / max_w;
+    uint32_t step_y = ((uint32_t)h << 16) / max_h;
+
+    int force_full_redraw = (last_drawn_frame == -1 || current_frame == 0);
+    last_drawn_frame = current_frame;
+
+    int dirty_x1 = dest_x + draw_w, dirty_y1 = dest_y + draw_h;
+    int dirty_x2 = dest_x, dirty_y2 = dest_y;
+    int pixels_changed = 0;
+
+    uint32_t curr_y = 0;
+
+    for (int py = 0; py < draw_h; py++) {
+        uint32_t src_y = (curr_y >> 16);
+        if (src_y >= (uint32_t)h) src_y = h - 1;
+        curr_y += step_y;
+
+        const uint8_t* row = frame_pixels + (src_y * w * 3);
+        int screen_y = dest_y + py;
+
+        if (screen_y >= 0 && screen_y < (int)screen_h) {
+            uint32_t curr_x = 0;
+            for (int px = 0; px < draw_w; px++) {
+                uint32_t src_x = (curr_x >> 16);
+                if (src_x >= (uint32_t)w) src_x = w - 1;
+                curr_x += step_x;
+
+                int screen_x = dest_x + px;
+                if (screen_x >= 0 && screen_x < (int)screen_w) {
+                    const uint8_t* pixel = row + (src_x * 3);
+                    uint32_t new_color = ((uint32_t)pixel[2] << 16) | ((uint32_t)pixel[1] << 8) | pixel[0];
+
+                    if (!force_full_redraw) {
+                        uint32_t old_color = gfx_get_pixel(screen_x, screen_y);
+                        int dr = (int)((new_color >> 16) & 0xFF) - (int)((old_color >> 16) & 0xFF);
+                        int dg = (int)((new_color >> 8) & 0xFF) - (int)((old_color >> 8) & 0xFF);
+                        int db = (int)(new_color & 0xFF) - (int)(old_color & 0xFF);
+                        if (dr < 0) dr = -dr;
+                        if (dg < 0) dg = -dg;
+                        if (db < 0) db = -db;
+
+                        if (dr + dg + db <= DELTA_THRESHOLD) {
+                            continue;
+                        }
+                    }
+
+                    gfx_put_pixel(screen_x, screen_y, new_color);
+                    pixels_changed++;
+
+                    if (screen_x < dirty_x1) dirty_x1 = screen_x;
+                    if (screen_x > dirty_x2) dirty_x2 = screen_x;
+                    if (screen_y < dirty_y1) dirty_y1 = screen_y;
+                    if (screen_y > dirty_y2) dirty_y2 = screen_y;
+                }
+            }
         }
-
-        uint32_t abs_x = (uint32_t)pos_x + delta.x;
-        uint32_t abs_y = (uint32_t)pos_y + delta.y;
-
-        size_t fb_index = (size_t)abs_y * pitch + abs_x;
-
-        // Skip key color transparency
-        if ((flags & BGIF_FLAG_HAS_TRANSPARENT) && (delta.color == trans_key)) {
-            continue;
-        }
-
-        uint32_t current_pixel = fb[fb_index];
-
-        // Skip write if destination pixel color is already identical
-        if (current_pixel == delta.color) {
-            continue;
-        }
-
-        // Apply smooth color transition if smooth blend flag is enabled or blend_factor < 255
-        uint32_t final_color;
-        if ((flags & BGIF_FLAG_SMOOTH_BLEND) || blend_factor < 255) {
-            final_color = bgif_blend_rgb(current_pixel, delta.color, blend_factor);
-        } else {
-            final_color = delta.color;
-        }
-
-        fb[fb_index] = final_color;
     }
 
-    return BGIF_OK;
+    if (pixels_changed > 0 && dirty_x2 >= dirty_x1 && dirty_y2 >= dirty_y1) {
+        gfx_mark_dirty(dirty_x1, dirty_y1, dirty_x2 - dirty_x1 + 1, dirty_y2 - dirty_y1 + 1);
+    }
+
+    return total_frames;
 }

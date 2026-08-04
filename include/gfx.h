@@ -25,6 +25,7 @@ void gfx_set_target(uint32_t* target, uint32_t w, uint32_t h);
 void gfx_blit(uint32_t* src, int dx, int dy, int w, int h);
 
 void gfx_put_pixel(int x, int y, uint32_t color);
+uint32_t gfx_get_pixel(int x, int y);
 void gfx_put_pixel_alpha(int x, int y, uint32_t color, uint8_t alpha);
 void gfx_clear(uint32_t color);
 void gfx_draw_rect(int x, int y, int width, int height, uint32_t color);

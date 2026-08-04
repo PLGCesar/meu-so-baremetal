@@ -56,7 +56,6 @@ static int calc_clear_next = 0;
 static char pad_buffer[256] = "BEM-VINDO AO CAPIVARAPAD! DIGITE SEU TEXTO AQUI...";
 static int pad_index = 50;
 
-// Mapeamento de Ícones de Cada App (0..12)
 static char app_icon_files[13][32] = {
     "shell.bmp", "ram.bmp", "net.bmp", "gallery.bmp", "music.bmp",
     "tasks.bmp", "paint.bmp", "vfs.bmp", "snake.bmp", "video.bmp",
@@ -140,6 +139,7 @@ static void format_time_string(char* buf, uint8_t h, uint8_t m, uint8_t s) {
 void bring_to_front(int win_id) {
     top_z_index++; windows[win_id].z_index = top_z_index;
     windows[win_id].is_open = 1;
+    bgif_reset_delta_cache();
     ui_needs_redraw = 1;
 }
 
@@ -203,7 +203,11 @@ static void process_shell_command(void) {
         size_t sz = 0;
         const uint8_t* content = vfs_read(input_buffer + 4, &sz);
         if (content) {
-            for (size_t i = 0; i < sz && i < 120; i++) shell_output[i] = content[i];
+            size_t copy_sz = sz < 120 ? sz : 120;
+            for (size_t i = 0; i < copy_sz; i++) shell_output[i] = content[i];
+            shell_output[copy_sz] = '\0';
+        } else {
+            kstrcpy(shell_output, "ARQUIVO NAO ENCONTRADO!");
         }
     } else if (kstrncmp(input_buffer, "write ", 6) == 0) {
         char filename[32]; int f_idx = 0, i = 6;
@@ -296,7 +300,6 @@ void ui_handle_mouse(void) {
         }
     }
 
-    // Clique nos icones do Desktop (Coluna 1)
     if (just_pressed && mouse_x >= 15 && mouse_x <= 135) {
         if (mouse_y >= 20 && mouse_y <= 75) bring_to_front(0);
         else if (mouse_y >= 80 && mouse_y <= 135) bring_to_front(1);
@@ -308,7 +311,7 @@ void ui_handle_mouse(void) {
         else if (mouse_y >= 440 && mouse_y <= 495) bring_to_front(7);
         else if (mouse_y >= 500 && mouse_y <= 555) bring_to_front(9);
     }
-    // Coluna 2
+
     if (just_pressed && mouse_x >= 145 && mouse_x <= 265) {
         if (mouse_y >= 20 && mouse_y <= 75) bring_to_front(10);
         else if (mouse_y >= 80 && mouse_y <= 135) bring_to_front(11);
@@ -338,18 +341,15 @@ void ui_handle_mouse(void) {
             bring_to_front(clicked_win);
             window_t* w = &windows[clicked_win];
 
-            // Botão Fechar Janela
             if (mouse_x >= (w->x + w->w - 25) && mouse_x <= (w->x + w->w - 9) &&
                 mouse_y >= (w->y + 7) && mouse_y <= (w->y + 23)) {
                 w->is_open = 0; dragging_window_id = -1; ui_needs_redraw = 1; return;
             }
 
-            // Mover Janela
             if (mouse_y >= w->y && mouse_y <= (w->y + 30)) {
                 dragging_window_id = clicked_win; drag_off_x = mouse_x - w->x; drag_off_y = mouse_y - w->y;
             }
 
-            // CapivaraPad (App 12)
             if (w->app_type == 12 && mouse_y >= w->y + 420 && mouse_y <= w->y + 455) {
                 if (mouse_x >= w->x + 30 && mouse_x <= w->x + 220) {
                     vfs_write_file("nota.txt", (const uint8_t*)pad_buffer, kstrlen(pad_buffer));
@@ -361,22 +361,22 @@ void ui_handle_mouse(void) {
                 ui_needs_redraw = 1;
             }
 
-            // Player de Video BGIF (App 9)
             if (w->app_type == 9 && mouse_y >= w->y + 400 && mouse_y <= w->y + 440) {
                 if (mouse_x >= w->x + 30 && mouse_x <= w->x + 180) video_playing = !video_playing;
                 else if (mouse_x >= w->x + 200 && mouse_x <= w->x + 360) video_frame++;
-                else if (mouse_x >= w->x + 380 && mouse_x <= w->x + 550) current_wallpaper = 4;
+                else if (mouse_x >= w->x + 380 && mouse_x <= w->x + 550) {
+                    current_wallpaper = 4;
+                    bgif_reset_delta_cache();
+                }
                 ui_needs_redraw = 1;
             }
 
-            // Chiptune Player (App 4)
             if (w->app_type == 4 && mouse_y >= w->y + 160 && mouse_y <= w->y + 200) {
                 if (mouse_x >= w->x + 50 && mouse_x <= w->x + 200) music_toggle_play();
                 else if (mouse_x >= w->x + 220 && mouse_x <= w->x + 400) music_next_track();
                 ui_needs_redraw = 1;
             }
 
-            // Calculadora (App 10)
             if (w->app_type == 10) {
                 int col = (mouse_x - (w->x + 15)) / 43;
                 int row = (mouse_y - (w->y + 100)) / 35;
@@ -425,10 +425,8 @@ void ui_handle_mouse(void) {
                 }
             }
 
-            // Galeria & Wallpapers & Definir Ícones (App 3)
             if (w->app_type == 3) {
                 int btn_y1 = w->y + 375; int btn_y2 = w->y + 415; int btn_y3 = w->y + 455;
-                // Selecao de foto / arte
                 if (mouse_y >= btn_y1 && mouse_y <= btn_y1 + 30) {
                     if (mouse_x >= w->x + 20 && mouse_x <= w->x + 110) gallery_photo = 0;
                     else if (mouse_x >= w->x + 120 && mouse_x <= w->x + 200) gallery_photo = 1;
@@ -436,14 +434,18 @@ void ui_handle_mouse(void) {
                     else if (mouse_x >= w->x + 320 && mouse_x <= w->x + 450) gallery_photo = 3;
                 }
 
-                // Opcoes de Wallpaper
                 if (mouse_y >= btn_y2 && mouse_y <= btn_y2 + 30) {
-                    if (mouse_x >= w->x + 20 && mouse_x <= w->x + 210) current_wallpaper = gallery_photo;
+                    if (mouse_x >= w->x + 20 && mouse_x <= w->x + 210) {
+                        current_wallpaper = gallery_photo;
+                        bgif_reset_delta_cache();
+                    }
                     else if (mouse_x >= w->x + 225 && mouse_x <= w->x + 435) vfs_write_file("paisagem.art", (const uint8_t*)"ARTE RECENTE DA GALERIA", 23);
-                    else if (mouse_x >= w->x + 450 && mouse_x <= w->x + 610) current_wallpaper = -1;
+                    else if (mouse_x >= w->x + 450 && mouse_x <= w->x + 610) {
+                        current_wallpaper = -1;
+                        bgif_reset_delta_cache();
+                    }
                 }
 
-                // Opcoes de Atribuir Ícone para Apps
                 if (mouse_y >= btn_y3 && mouse_y <= btn_y3 + 30) {
                     if (mouse_x >= w->x + 20 && mouse_x <= w->x + 250) {
                         selected_icon_target_app = (selected_icon_target_app + 1) % 13;
@@ -456,7 +458,6 @@ void ui_handle_mouse(void) {
                 ui_needs_redraw = 1;
             }
 
-            // Paint Studio (App 6)
             if (w->app_type == 6 && mouse_y >= w->y + 430 && mouse_y <= w->y + 460) {
                 if (mouse_x >= w->x + 20 && mouse_x <= w->x + 60) paint_color = 0xFF0000;
                 else if (mouse_x >= w->x + 70 && mouse_x <= w->x + 110) paint_color = 0x00FF00;
@@ -669,14 +670,14 @@ void draw_single_window(window_t* w) {
         gfx_draw_string("VERSAO ATUAL: CapivaraOS 64-bit v1.4", win_x + 35, win_y + 90, COLOR_YELLOW);
         gfx_draw_string("--------------------------------------------", win_x + 35, win_y + 110, COLOR_GRAY);
 
-        gfx_draw_string("[+] ADICIONADO: App 12 CapivaraPad (Bloco de Notas)", win_x + 35, win_y + 130, COLOR_GREEN);
+        gfx_draw_string("[+] ADICIONADO: Renderizador Delta de Video BGIF", win_x + 35, win_y + 130, COLOR_GREEN);
         gfx_draw_string("[+] ADICIONADO: Suporte a Letras Acentuadas e Cedilha", win_x + 35, win_y + 150, COLOR_GREEN);
         gfx_draw_string("[+] ADICIONADO: Suporte a Teclas SHIFT, Caps e Simbolos", win_x + 35, win_y + 170, COLOR_GREEN);
 
-        gfx_draw_string("[*] OTIMIZADO: Teclado e Mouse sem Latencia (Buffer PS/2)", win_x + 35, win_y + 200, COLOR_BLUE);
-        gfx_draw_string("[*] OTIMIZADO: Efeitos Sonoros com HLT sem gastar CPU", win_x + 35, win_y + 220, COLOR_BLUE);
+        gfx_draw_string("[*] OTIMIZADO: Alinhamento de Memoria de 16 Bytes (SIMD)", win_x + 35, win_y + 200, COLOR_BLUE);
+        gfx_draw_string("[*] OTIMIZADO: Escalonador Fallback e Teclado/Mouse PS/2", win_x + 35, win_y + 220, COLOR_BLUE);
 
-        gfx_draw_string("[-] REMOVIDO: Lacos de Espera Cega (for/while)", win_x + 35, win_y + 250, COLOR_RED);
+        gfx_draw_string("[-] REMOVIDO: Redesenho integral desnecessario por quadro", win_x + 35, win_y + 250, COLOR_RED);
     } else if (w->app_type == 12) {
         gfx_draw_string("CAPIVARAPAD - BLOCO DE NOTAS DIGITAVEL:", win_x + 20, win_y + 45, COLOR_GREEN);
         gfx_draw_rect(win_x + 20, win_y + 70, win_w - 40, 330, COLOR_WHITE);
@@ -695,7 +696,6 @@ void draw_single_window(window_t* w) {
     }
 }
 
-// Renderiza Icone Mini BMP Real no Desktop
 void draw_desktop_icon(int x, int y, int app_id, const char* title, const char* sub, uint32_t color) {
     int is_hovered = (mouse_x >= x && mouse_x <= x + 120 && mouse_y >= y && mouse_y <= y + 55);
     uint32_t bg_color = is_hovered ? COLOR_BLUE : COLOR_NAVY;
@@ -704,7 +704,6 @@ void draw_desktop_icon(int x, int y, int app_id, const char* title, const char* 
     gfx_draw_rect_alpha(x, y, 120, 55, bg_color, 210);
     gfx_draw_rect(x + 2, y + 2, 116, 51, border_color);
 
-    // Desenha o Mini Ícone BMP Real
     size_t sz = 0;
     const uint8_t* icon_data = vfs_read(app_icon_files[app_id], &sz);
     if (icon_data) {

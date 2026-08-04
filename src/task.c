@@ -5,7 +5,7 @@
 static task_t tasks[MAX_TASKS];
 static int current_task = 0;
 static int num_tasks = 0;
-static volatile uint64_t system_ticks = 0; // Volatile essencial para otimização -O3 -flto
+static volatile uint64_t system_ticks = 0;
 
 static inline void outb(uint16_t port, uint8_t val) {
     asm volatile ("outb %0, %1" : : "a"(val), "Nd"(port));
@@ -22,7 +22,7 @@ void task_init(void) {
     num_tasks = 0; current_task = 0; system_ticks = 0;
 
     task_t* t = &tasks[0];
-    t->pid = 1; t->state = TASK_STATE_RUNNING; t->priority = 5; // Kernel Main = High Prio
+    t->pid = 1; t->state = TASK_STATE_RUNNING; t->priority = 5;
     t->ticks_remaining = 10; t->time_ticks = 0; t->wake_ticks = 0; t->is_user = 0;
     
     const char* name = "CapivaraOS_Kernel";
@@ -34,7 +34,7 @@ void task_init(void) {
 }
 
 void task_yield(void) {
-    asm volatile ("int $32"); // Força o timer IRQ0 para evitar busy-wait (CPU Yield)
+    asm volatile ("int $32");
 }
 
 int task_create(void (*entry)(void), const char* name, int priority) {
@@ -51,7 +51,7 @@ int task_create(void (*entry)(void), const char* name, int priority) {
     *(--stk) = 0x10;
     uint64_t rsp_val = (uint64_t)stk;
     *(--stk) = rsp_val;
-    *(--stk) = 0x0202; // IF flag enabled
+    *(--stk) = 0x0202;
     *(--stk) = 0x08;
     *(--stk) = (uint64_t)entry;
 
@@ -90,7 +90,7 @@ int task_create_user(void (*entry)(void), const char* name, int priority) {
 void task_sleep(uint64_t ticks) {
     tasks[current_task].state = TASK_STATE_SLEEPING;
     tasks[current_task].wake_ticks = system_ticks + ticks;
-    task_yield(); // Dorme sem busy-waiting
+    task_yield();
 }
 
 __attribute__((hot)) uint64_t schedule(uint64_t current_rsp) {
@@ -117,7 +117,6 @@ __attribute__((hot)) uint64_t schedule(uint64_t current_rsp) {
         tasks[current_task].state = TASK_STATE_READY;
     }
 
-    // Algoritmo de Múltiplas Filas Baseadas em Prioridade Dinâmica (MLFQ Simplificado)
     int highest_prio = -1;
     for (int i = 0; i < num_tasks; i++) {
         if (tasks[i].state == TASK_STATE_READY) {
@@ -125,20 +124,23 @@ __attribute__((hot)) uint64_t schedule(uint64_t current_rsp) {
         }
     }
 
-    int next_task = current_task;
+    int next_task = 0;
     if (highest_prio != -1) {
         int checked = 0;
-        next_task = (current_task + 1) % num_tasks;
+        int candidate = (current_task + 1) % num_tasks;
         while (checked < num_tasks) {
-            if (tasks[next_task].state == TASK_STATE_READY && tasks[next_task].priority == highest_prio) break;
-            next_task = (next_task + 1) % num_tasks;
+            if (tasks[candidate].state == TASK_STATE_READY && tasks[candidate].priority == highest_prio) {
+                next_task = candidate;
+                break;
+            }
+            candidate = (candidate + 1) % num_tasks;
             checked++;
         }
     }
 
     current_task = next_task;
     tasks[current_task].state = TASK_STATE_RUNNING;
-    tasks[current_task].ticks_remaining = tasks[current_task].priority * 2; // Time Slice escalável
+    tasks[current_task].ticks_remaining = tasks[current_task].priority * 2;
 
     return tasks[current_task].rsp;
 }

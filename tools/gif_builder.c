@@ -37,9 +37,9 @@ int main(void) {
     uint8_t frame_buffer[WIDTH * HEIGHT * 3];
 
     for (int frame = 0; frame < FRAMES; frame++) {
-        float angle = (frame * 3.14159f * 2.0f) / FRAMES;
-        int cx = WIDTH / 2 + (int)(sinf(angle) * 30.0f);
-        int cy = HEIGHT / 2 + (int)(cosf(angle) * 20.0f);
+        float angle = (frame * 3.14159265f * 2.0f) / FRAMES;
+        int cx = WIDTH / 2 + (int)(sinf(angle) * 35.0f);
+        int cy = HEIGHT / 2 + (int)(cosf(angle) * 25.0f);
 
         for (int y = 0; y < HEIGHT; y++) {
             for (int x = 0; x < WIDTH; x++) {
@@ -48,15 +48,17 @@ int main(void) {
                 int dist2 = dx*dx + dy*dy;
 
                 uint8_t r = 0, g = 0, b = 0;
-                if (dist2 < 1200) {
-                    int intensity = (1200 - dist2) * 255 / 1200;
-                    r = (uint8_t)(intensity);
-                    g = (uint8_t)(intensity / 2 + (frame * 8) % 128);
-                    b = (uint8_t)(255 - intensity);
-                } else {
-                    r = (uint8_t)((x * 255) / WIDTH);
-                    g = (uint8_t)((y * 255) / HEIGHT);
-                    b = (uint8_t)((frame * 255) / FRAMES);
+                // Fundo gradiente cósmico ESTÁVEL entre quadros (permite descarte pelo renderizador Delta)
+                r = (uint8_t)((x * 40) / WIDTH + 10);
+                g = (uint8_t)((y * 30) / HEIGHT + 5);
+                b = (uint8_t)(35 + (x * 20) / WIDTH);
+
+                // Esfera animada com gradiente suave
+                if (dist2 < 900) {
+                    int intensity = (900 - dist2) * 255 / 900;
+                    r = (uint8_t)(intensity > 255 ? 255 : intensity);
+                    g = (uint8_t)((intensity * 180) / 255);
+                    b = (uint8_t)(255 - intensity / 2);
                 }
 
                 int idx = (y * WIDTH + x) * 3;
@@ -69,6 +71,6 @@ int main(void) {
     }
 
     fclose(f);
-    printf("Video animacao.bgif gerado com sucesso! (30 quadros)\n");
+    printf("Video animacao.bgif gerado com sucesso! (30 quadros, otimizacao delta)\n");
     return 0;
 }

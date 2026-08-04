@@ -55,7 +55,6 @@ void idt_set_gate(uint8_t num, uint64_t base, uint16_t sel, uint8_t flags) {
     idt[num].sel = sel; idt[num].ist = 0; idt[num].flags = flags; idt[num].reserved = 0;
 }
 
-// Tratamento Robusto de Exceções Críticas
 void exception0_handler(void) {
     serial_write("[PANIC] DIVISAO POR ZERO\n");
     gfx_clear(0x880000); gfx_draw_string("KERNEL PANIC: EXCECAO 00 (DIVISAO POR ZERO)", 120, 162, 0xFFFFFF); gfx_swap_buffers();
@@ -113,6 +112,11 @@ void idt_init(void) {
 
 void keyboard_handler_main(void) {
     while (inb(0x64) & 0x01) {
+        uint8_t status = inb(0x64);
+        if (status & 0x20) {
+            mouse_handler_main();
+            return;
+        }
         uint8_t scancode = inb(0x60);
         if (scancode & 0x80) {
             uint8_t rel = scancode & 0x7F;

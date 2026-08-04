@@ -26,7 +26,6 @@ static uint32_t pci_read_config(uint8_t bus, uint8_t slot, uint8_t func, uint8_t
     return inl(0x0CFC);
 }
 
-// RESTAURANDO SUA FONTE COMPLETA PARA A INTERFACE
 static const uint8_t font8x8_basic[256][8] = {
     ['A'] = {0x18, 0x3C, 0x66, 0x66, 0x7E, 0x66, 0x66, 0x00},
     ['B'] = {0x7C, 0x66, 0x66, 0x7C, 0x66, 0x66, 0x7C, 0x00},
@@ -179,6 +178,11 @@ void gfx_put_pixel(int x, int y, uint32_t color) {
     if(active_buffer == back_buffer) gfx_mark_dirty(x, y, 1, 1);
 }
 
+uint32_t gfx_get_pixel(int x, int y) {
+    if (x < 0 || (size_t)x >= active_width || y < 0 || (size_t)y >= active_height) return 0;
+    return active_buffer[(size_t)y * active_width + (size_t)x];
+}
+
 void gfx_put_pixel_alpha(int x, int y, uint32_t color, uint8_t alpha) {
     if (x < 0 || (size_t)x >= width || y < 0 || (size_t)y >= height) return;
     if (alpha == 0) return;
@@ -194,7 +198,6 @@ void gfx_put_pixel_alpha(int x, int y, uint32_t color, uint8_t alpha) {
     gfx_mark_dirty(x, y, 1, 1);
 }
 
-// OTIMIZAÇÃO SSE2 128-BITS AQUI (CLEAR)
 void gfx_clear(uint32_t color) {
     size_t total_bytes = total_pixels_64 * 4;
     size_t blocks_16 = total_bytes >> 4; 
@@ -203,7 +206,6 @@ void gfx_clear(uint32_t color) {
     gfx_mark_dirty(0, 0, (int)active_width, (int)active_height);
 }
 
-// OTIMIZAÇÃO SSE2 128-BITS AQUI (SWAP)
 void gfx_swap_buffers(void) {
     if (!framebuffer || !back_buffer || !dirty_active) return;
     int bw = dirty_max_x - dirty_min_x;
@@ -234,7 +236,6 @@ void gfx_swap_buffers(void) {
     active_buffer = back_buffer; active_width = width; active_height = height; gfx_reset_dirty();
 }
 
-// OTIMIZAÇÃO SSE2 128-BITS AQUI (RECT)
 void gfx_draw_rect(int x, int y, int w, int h, uint32_t color) {
     if (x >= (int)active_width || y >= (int)active_height || x + w <= 0 || y + h <= 0) return;
     int start_x = x < 0 ? 0 : x; int start_y = y < 0 ? 0 : y;
@@ -270,7 +271,6 @@ void gfx_set_target(uint32_t* target, uint32_t w, uint32_t h) {
     else { active_buffer = back_buffer; active_width = width; active_height = height; }
 }
 
-// OTIMIZAÇÃO SSE2 128-BITS AQUI (BLIT)
 void gfx_blit(uint32_t* src, int dx, int dy, int w, int h) {
     if (!src || dx >= (int)active_width || dy >= (int)active_height || dx + w <= 0 || dy + h <= 0) return;
     int start_x = dx < 0 ? 0 : dx; int start_y = dy < 0 ? 0 : dy;
@@ -293,7 +293,6 @@ void gfx_blit(uint32_t* src, int dx, int dy, int w, int h) {
     if (active_buffer == back_buffer) gfx_mark_dirty(start_x, start_y, copy_w, end_y - start_y);
 }
 
-// RESTAURAÇÃO DAS SUAS FUNÇÕES GRÁFICAS ORIGINAIS ABAIXO!
 void gfx_draw_char(char c, int x, int y, uint32_t color) {
     unsigned char uc = (unsigned char)c;
     if (uc >= 'a' && uc <= 'z') uc -= 32;

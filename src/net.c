@@ -54,7 +54,6 @@ void net_send_packet(const uint8_t* packet, uint32_t len) {
     serial_write("[NET] Pacote Transmitido via RTL8139!\n");
 }
 
-// CHECKSUM RFC 1071 PERFEITO EM BIG ENDIAN
 uint16_t ip_checksum(void* vdata, size_t length) {
     uint8_t* data = (uint8_t*)vdata;
     uint32_t sum = 0;
@@ -85,32 +84,28 @@ void net_send_udp(uint32_t dest_ip, uint16_t src_port, uint16_t dest_port, const
     udp_header_t* udp = (udp_header_t*)(packet + sizeof(ethernet_header_t) + sizeof(ipv4_header_t));
     uint8_t* data_ptr = packet + sizeof(ethernet_header_t) + sizeof(ipv4_header_t) + sizeof(udp_header_t);
 
-    // 1. ETHERNET HEADER (MAC DO GATEWAY DO QEMU: 52:54:00:12:35:02)
     uint8_t qemu_gateway_mac[6] = {0x52, 0x54, 0x00, 0x12, 0x35, 0x02};
     fast_memcpy(eth->dest_mac, qemu_gateway_mac, 6);
     fast_memcpy(eth->src_mac, mac_addr, 6);
-    eth->type = __builtin_bswap16(0x0800); // IPv4
+    eth->type = __builtin_bswap16(0x0800);
 
-    // 2. IPV4 HEADER (DESTINO = GATEWAY 10.0.2.2 DO QEMU)
     ip->ver_ihl = 0x45;
     ip->tos = 0x00;
     ip->total_len = __builtin_bswap16(sizeof(ipv4_header_t) + sizeof(udp_header_t) + payload_len);
     ip->id = __builtin_bswap16(1234);
     ip->flags_fragment = 0;
     ip->ttl = 64;
-    ip->protocol = 17; // UDP Protocol
+    ip->protocol = 17;
     ip->src_ip = my_ip;
     ip->dest_ip = dest_ip;
     ip->checksum = 0;
     ip->checksum = ip_checksum(ip, sizeof(ipv4_header_t));
 
-    // 3. UDP HEADER
     udp->src_port = __builtin_bswap16(src_port);
     udp->dest_port = __builtin_bswap16(dest_port);
     udp->length = __builtin_bswap16(sizeof(udp_header_t) + payload_len);
     udp->checksum = 0;
 
-    // 4. MENSAGEM
     fast_memcpy(data_ptr, payload, payload_len);
 
     net_send_packet(packet, (uint32_t)total_len);
@@ -136,7 +131,7 @@ void net_init(void) {
 
     for (int i = 0; i < 6; i++) mac_addr[i] = inb(io_base + i);
 
-    rx_buffer = kmalloc(8192 + 16 + 1500);
+    rx_buffer = kmalloc(8192 + 2048);
     outl(io_base + 0x30, (uint32_t)(uintptr_t)rx_buffer);
 
     outw(io_base + 0x3C, 0x0005);

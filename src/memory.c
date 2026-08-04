@@ -4,14 +4,25 @@
 #define MAGIC_HEADER 0xDEADBEEFCAFEBABEULL
 #define MAGIC_FOOTER 0xCAFEBABEDEADBEEFULL
 
+typedef struct {
+    uint64_t magic;
+    uint64_t pad;
+} __attribute__((aligned(16))) block_footer_t;
+
 extern uint32_t _kernel_end;
 static block_header_t* heap_first = NULL;
 static size_t total_allocated = 0;
 static size_t total_free = 0;
 static size_t block_count = 0;
 
+static inline void set_footer(block_header_t* block) {
+    block_footer_t* footer = (block_footer_t*)((uint8_t*)block + sizeof(block_header_t) + block->size);
+    footer->magic = MAGIC_FOOTER;
+    footer->pad = 0;
+}
+
 void kmemset128_zero(void* dest, size_t count_16) {
-    if (!dest || count_16 == 0) return; // CRÍTICO: Previne o GCC LTO de travar em loop de otimização!
+    if (!dest || count_16 == 0) return;
     __asm__ volatile (
         "pxor %%xmm0, %%xmm0\n\t"
         "1:\n\t movdqu %%xmm0, (%0)\n\t add $16, %0\n\t dec %1\n\t jnz 1b"
@@ -46,13 +57,12 @@ void memory_init(multiboot_info_t* mbi) {
     size_t heap_size = 32 * 1024 * 1024;
     heap_first = (block_header_t*)heap_start;
     heap_first->magic = MAGIC_HEADER;
-    heap_first->size = heap_size - sizeof(block_header_t) - sizeof(uint64_t);
+    heap_first->size = heap_size - sizeof(block_header_t) - sizeof(block_footer_t);
     heap_first->is_free = 1;
     heap_first->next = NULL;
     heap_first->prev = NULL;
 
-    uint64_t* footer = (uint64_t*)((uint8_t*)heap_first + sizeof(block_header_t) + heap_first->size);
-    *footer = MAGIC_FOOTER;
+    set_footer(heap_first);
 
     total_free = heap_first->size; total_allocated = 0; block_count = 1;
 }
@@ -65,20 +75,18 @@ void* kmalloc(size_t size) {
     while (curr) {
         if (curr->magic != MAGIC_HEADER) return NULL;
         if (curr->is_free && curr->size >= size) {
-            if (curr->size >= size + sizeof(block_header_t) + sizeof(uint64_t) + 32) {
-                size_t remaining_size = curr->size - size - sizeof(block_header_t) - sizeof(uint64_t);
-                block_header_t* new_b = (block_header_t*)((uint8_t*)curr + sizeof(block_header_t) + size + sizeof(uint64_t));
+            if (curr->size >= size + sizeof(block_header_t) + sizeof(block_footer_t) + 32) {
+                size_t remaining_size = curr->size - size - sizeof(block_header_t) - sizeof(block_footer_t);
+                block_header_t* new_b = (block_header_t*)((uint8_t*)curr + sizeof(block_header_t) + size + sizeof(block_footer_t));
                 new_b->magic = MAGIC_HEADER; new_b->size = remaining_size; new_b->is_free = 1;
                 new_b->next = curr->next; new_b->prev = curr;
                 if (curr->next) curr->next->prev = new_b;
                 curr->next = new_b;
-                uint64_t* new_footer = (uint64_t*)((uint8_t*)new_b + sizeof(block_header_t) + new_b->size);
-                *new_footer = MAGIC_FOOTER;
+                set_footer(new_b);
                 curr->size = size; block_count++;
             }
             curr->is_free = 0; total_allocated += curr->size; total_free -= curr->size;
-            uint64_t* footer = (uint64_t*)((uint8_t*)curr + sizeof(block_header_t) + curr->size);
-            *footer = MAGIC_FOOTER;
+            set_footer(curr);
             return (void*)((uint8_t*)curr + sizeof(block_header_t));
         }
         curr = curr->next;
@@ -123,21 +131,24 @@ void* krealloc(void* ptr, size_t new_size) {
 void kfree(void* ptr) {
     if (!ptr) return;
     block_header_t* block = (block_header_t*)((uint8_t*)ptr - sizeof(block_header_t));
-    if (block->is_free) return;
+    if (block->magic != MAGIC_HEADER || block->is_free) return;
+
     block->is_free = 1; total_allocated -= block->size; total_free += block->size;
 
     if (block->next && block->next->is_free) {
-        block->size += sizeof(block_header_t) + sizeof(uint64_t) + block->next->size;
+        block->size += sizeof(block_header_t) + sizeof(block_footer_t) + block->next->size;
         block->next = block->next->next;
         if (block->next) block->next->prev = block;
         block_count--;
     }
     if (block->prev && block->prev->is_free) {
-        block->prev->size += sizeof(block_header_t) + sizeof(uint64_t) + block->size;
+        block->prev->size += sizeof(block_header_t) + sizeof(block_footer_t) + block->size;
         block->prev->next = block->next;
         if (block->next) block->next->prev = block->prev;
+        block = block->prev;
         block_count--;
     }
+    set_footer(block);
 }
 
 #define PAGE_PRESENT  0x01

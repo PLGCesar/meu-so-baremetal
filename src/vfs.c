@@ -18,28 +18,52 @@ void vfs_init(void) {
 }
 
 void vfs_list(char* out_buf, size_t max_len) {
-    (void)max_len;
+    if (!out_buf || max_len == 0) return;
     out_buf[0] = '\0';
-    kstrcpy(out_buf, "app.elf  animacao.bgif  foto.bmp  icons.cfg  ");
+    size_t len = 0;
+
+    const char* base_files = "app.elf  animacao.bgif  foto.bmp  icons.cfg  ";
+    size_t base_len = kstrlen(base_files);
+    if (base_len < max_len) {
+        kstrcpy(out_buf, base_files);
+        len = base_len;
+    }
+
     for (size_t i = 0; i < g_embedded_assets_count; i++) {
-        size_t len = kstrlen(out_buf);
-        if (len + kstrlen(g_embedded_assets[i].name) + 2 < max_len) {
+        size_t name_len = kstrlen(g_embedded_assets[i].name);
+        if (len + name_len + 3 < max_len) {
             kstrcpy(out_buf + len, g_embedded_assets[i].name);
-            len = kstrlen(out_buf);
-            out_buf[len] = ' '; out_buf[len+1] = ' '; out_buf[len+2] = '\0';
+            len += name_len;
+            out_buf[len++] = ' ';
+            out_buf[len++] = ' ';
+            out_buf[len] = '\0';
         }
     }
 }
 
 void vfs_list_custom_format(char* out_buf, size_t max_len) {
-    (void)max_len;
+    if (!out_buf || max_len == 0) return;
     out_buf[0] = '\0';
-    kstrcpy(out_buf, "#|ROOT*app.elf\n#|ROOT*animacao.bgif\n#|ROOT*foto.bmp\n#|ROOT*icons.cfg\n");
+    size_t len = 0;
+
+    const char* base_files = "#|ROOT*app.elf\n#|ROOT*animacao.bgif\n#|ROOT*foto.bmp\n#|ROOT*icons.cfg\n";
+    size_t base_len = kstrlen(base_files);
+    if (base_len < max_len) {
+        kstrcpy(out_buf, base_files);
+        len = base_len;
+    }
+
     for (size_t i = 0; i < g_embedded_assets_count; i++) {
-        size_t len = kstrlen(out_buf);
-        kstrcpy(out_buf + len, "#|ROOT*");
-        kstrcpy(out_buf + kstrlen(out_buf), g_embedded_assets[i].name);
-        kstrcpy(out_buf + kstrlen(out_buf), "\n");
+        size_t name_len = kstrlen(g_embedded_assets[i].name);
+        size_t total_item_len = 7 + name_len + 1;
+        if (len + total_item_len < max_len) {
+            kstrcpy(out_buf + len, "#|ROOT*");
+            len += 7;
+            kstrcpy(out_buf + len, g_embedded_assets[i].name);
+            len += name_len;
+            out_buf[len++] = '\n';
+            out_buf[len] = '\0';
+        }
     }
 }
 
@@ -50,7 +74,6 @@ const uint8_t* vfs_read(const char* filename, size_t* out_size) {
         clean_name = filename + 7;
     }
 
-    // 1. Arquivos binarios nativos embutidos no kernel (boot.s)
     if (kstrcmp(clean_name, "app.elf") == 0) {
         *out_size = (size_t)(app_elf_end - app_elf_start);
         return app_elf_start;
@@ -60,7 +83,6 @@ const uint8_t* vfs_read(const char* filename, size_t* out_size) {
         return bgif_anim_start;
     }
     if (kstrcmp(clean_name, "foto.bmp") == 0) {
-        // Tenta ler do disco FAT32 se foi salvo/sobrescrito
         const uint8_t* disk_data = fat32_read_file(clean_name, out_size);
         if (disk_data) return disk_data;
 
@@ -71,11 +93,9 @@ const uint8_t* vfs_read(const char* filename, size_t* out_size) {
         }
     }
 
-    // 2. Tenta ler do disco FAT32
     const uint8_t* disk_data = fat32_read_file(clean_name, out_size);
     if (disk_data) return disk_data;
 
-    // 3. Tenta encontrar no banco de assets incorporados do bmp.txt
     for (size_t i = 0; i < g_embedded_assets_count; i++) {
         if (kstrcmp(clean_name, g_embedded_assets[i].name) == 0) {
             *out_size = (size_t)(g_embedded_assets[i].end - g_embedded_assets[i].start);
