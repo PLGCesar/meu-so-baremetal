@@ -1,30 +1,4 @@
 #include "../include/klibc.h"
-#include "../include/serial.h"
-
-int avx2_supported = 0;
-
-void klibc_init_cpu_features(void) {
-    uint32_t eax = 1, ebx = 0, ecx = 0, edx = 0;
-    
-    // Testa OSXSAVE (Bit 27 do ECX no CPUID 1)
-    __asm__ volatile ("cpuid" : "=a"(eax), "=b"(ebx), "=c"(ecx), "=d"(edx) : "a"(eax));
-    if (ecx & (1 << 27)) {
-        // Checa CPUID Leaf 7 (Suporte Estendido)
-        eax = 7; ebx = 0; ecx = 0; edx = 0;
-        __asm__ volatile ("cpuid" : "=a"(eax), "=b"(ebx), "=c"(ecx), "=d"(edx) : "a"(eax), "c"(0));
-        
-        // Bit 5 do EBX indica se o AVX2 está presente fisicamente
-        if (ebx & (1 << 5)) {
-            avx2_supported = 1;
-        }
-    }
-
-    if (avx2_supported) {
-        serial_write("[HW] CPU Moderna: Extensoes SIMD AVX2 (256-bits) Ativadas!\n");
-    } else {
-        serial_write("[HW] CPU Legacy: Modo SSE2 (128-bits) Acionado via Fallback.\n");
-    }
-}
 
 void fast_memcpy(void* dest, const void* src, size_t n) {
     size_t qwords = n >> 3; size_t bytes = n & 7;

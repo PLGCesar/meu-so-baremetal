@@ -26,12 +26,13 @@ static uint32_t pci_read_config(uint8_t bus, uint8_t slot, uint8_t func, uint8_t
     return inl(0x0CFC);
 }
 
-// INICIO - IMPLEMENTACAO DE DESENHO GRAFICO E FONTES
-// Mantido compacto para poupar espaço visual sem perder as features
 void gfx_mark_dirty(int x, int y, int w, int h) {
     if (w <= 0 || h <= 0) return;
     int x2 = x + w; int y2 = y + h;
-    if (x < 0) x = 0; if (y < 0) y = 0;
+    
+    if (x < 0) { x = 0; }
+    if (y < 0) { y = 0; }
+    
     if (x2 > (int)active_width) x2 = (int)active_width;
     if (y2 > (int)active_height) y2 = (int)active_height;
     if (x < dirty_min_x) dirty_min_x = x;
@@ -96,18 +97,15 @@ void gfx_put_pixel_alpha(int x, int y, uint32_t color, uint8_t alpha) {
     gfx_mark_dirty(x, y, 1, 1);
 }
 
-// -----------------------------------------------------------------------------------------
-// PODER DO YMM (256-BIT): PREENCHENDO O TELA (CLEAR) COM TRANSFERÊNCIAS DE 32-BYTES (8 PIXELS) 
-// -----------------------------------------------------------------------------------------
 void gfx_clear(uint32_t color) {
     size_t total_bytes = total_pixels_64 * 4;
-    kfast_memset_color(back_buffer, color, total_bytes);
+    size_t blocks_16 = total_bytes >> 4; 
+    
+    kmemset128_color(back_buffer, color, blocks_16);
+    
     gfx_mark_dirty(0, 0, (int)active_width, (int)active_height);
 }
 
-// -----------------------------------------------------------------------------------------
-// PODER DO YMM (256-BIT): ENVIANDO O BACKBUFFER PARA O FRAMEBUFFER (SWAP) COM 32-BYTES POR CICLO
-// -----------------------------------------------------------------------------------------
 void gfx_swap_buffers(void) {
     if (!framebuffer || !back_buffer || !dirty_active) return;
     int bw = dirty_max_x - dirty_min_x;
@@ -119,49 +117,42 @@ void gfx_swap_buffers(void) {
     }
 
     if (bw == (int)active_width && bh == (int)active_height) {
-        // Redraw Total de Tela (Wallpaper) - 256 Bits Puros (1/4 das iteracoes de memcpy normais)
-        size_t blocks_32 = (total_pixels_64 * 4) >> 5;
-        kkfast_memcpy(framebuffer, back_buffer, blocks_32);
+        size_t blocks_16 = (total_pixels_64 * 4) >> 4;
+        kmemcpy128(framebuffer, back_buffer, blocks_16);
     } else {
-        // Renderizacao Focada em Retangulos Sujos (Window Manager UI)
         size_t line_bytes = (size_t)bw * 4;
-        size_t blocks_32 = line_bytes >> 5;
-        size_t rem = line_bytes & 31;
+        size_t blocks_16 = line_bytes >> 4;
+        size_t rem = line_bytes & 15;
 
         for (int y = dirty_min_y; y < dirty_max_y; y++) {
             uint8_t* src = (uint8_t*)back_buffer + ((size_t)y * width + (size_t)dirty_min_x) * 4;
             uint8_t* dst = (uint8_t*)framebuffer + ((size_t)y * width + (size_t)dirty_min_x) * 4;
             
-            // Joga no barramento VBE usando 256 bits AVX2!
-            if (blocks_32 > 0) kkfast_memcpy(dst, src, blocks_32);
-            // Resíduos pequenos usando string ops nativas do Klibc.
-            if (rem > 0) kkfast_memcpy(dst + (blocks_32 << 5), src + (blocks_32 << 5), rem);
+            if (blocks_16 > 0) kmemcpy128(dst, src, blocks_16);
+            if (rem > 0) fast_memcpy(dst + (blocks_16 << 4), src + (blocks_16 << 4), rem);
         }
     }
 
     active_buffer = back_buffer; active_width = width; active_height = height; gfx_reset_dirty();
 }
 
-// RESTANTE DAS FUNÇÕES OTIMIZADAS PARA O WINDOW MANAGER...
 void gfx_draw_rect(int x, int y, int w, int h, uint32_t color) {
     if (x >= (int)active_width || y >= (int)active_height || x + w <= 0 || y + h <= 0) return;
     int start_x = x < 0 ? 0 : x; int start_y = y < 0 ? 0 : y;
     int end_x = x + w > (int)active_width ? (int)active_width : x + w;
     int end_y = y + h > (int)active_height ? (int)active_height : y + h;
 
-    // Também aproveitamos as intrucoes 256-bit para o render do desenho das janelas
     size_t line_bytes = (end_x - start_x) * 4;
-    size_t blocks_32 = line_bytes >> 5;
-    size_t rem = line_bytes & 31;
+    size_t blocks_16 = line_bytes >> 4;
+    size_t rem = line_bytes & 15;
     
     for (int i = start_y; i < end_y; i++) {
         uint8_t* row_ptr = (uint8_t*)(active_buffer + (i * active_width) + start_x);
-        if (blocks_32 > 0) kkfast_memset_zero_color(row_ptr, color, blocks_32);
+        if (blocks_16 > 0) kmemset128_color(row_ptr, color, blocks_16);
         
-        // Finaliza os resíduos (ex: se janela não é múltiplo de 32 bytes)
         if (rem > 0) {
-            uint32_t* p = (uint32_t*)(row_ptr + (blocks_32 << 5));
-            for(size_t r=0; r < rem/4; r++) p[r] = color;
+            uint32_t* p = (uint32_t*)(row_ptr + (blocks_16 << 4));
+            for(size_t r = 0; r < rem/4; r++) p[r] = color;
         }
     }
     gfx_mark_dirty(start_x, start_y, end_x - start_x, end_y - start_y);
@@ -184,26 +175,26 @@ void gfx_blit(uint32_t* src, int dx, int dy, int w, int h) {
     if (!src || dx >= (int)active_width || dy >= (int)active_height || dx + w <= 0 || dy + h <= 0) return;
     int start_x = dx < 0 ? 0 : dx; int start_y = dy < 0 ? 0 : dy;
     int end_x = dx + w > (int)active_width ? (int)active_width : dx + w;
-    int end_y = dy + h > (int)active_height ? (int)active_height : y + h;
+    
+    // CORRIGIDO: dy + h ao invés de y + h
+    int end_y = dy + h > (int)active_height ? (int)active_height : dy + h;
     
     int copy_w = end_x - start_x;
     size_t line_bytes = copy_w * 4;
-    size_t blocks_32 = line_bytes >> 5;
-    size_t rem = line_bytes & 31;
+    size_t blocks_16 = line_bytes >> 4;
+    size_t rem = line_bytes & 15;
 
     for (int i = start_y; i < end_y; i++) {
         int src_y = i - dy; int src_x = start_x - dx;
         uint8_t* dst = (uint8_t*)(active_buffer + (i * active_width + start_x));
         uint8_t* sour = (uint8_t*)(src + (src_y * w + src_x));
         
-        // BLIT DE JANELAS EM VELOCIDADE AVX2! 
-        if (blocks_32 > 0) kkfast_memcpy(dst, sour, blocks_32);
-        if (rem > 0) kkfast_memcpy(dst + (blocks_32<<5), sour + (blocks_32<<5), rem);
+        if (blocks_16 > 0) kmemcpy128(dst, sour, blocks_16);
+        if (rem > 0) fast_memcpy(dst + (blocks_16 << 4), sour + (blocks_16 << 4), rem);
     }
     if (active_buffer == back_buffer) gfx_mark_dirty(start_x, start_y, copy_w, end_y - start_y);
 }
 
-// Dummy primitives implementadas nativamente para não encher o output (como combinamos, vc já as tinha perfeitamente em gfx.c)
 void gfx_draw_char(char c, int x, int y, uint32_t color) { (void)c; (void)x; (void)y; (void)color; }
 void gfx_draw_string(const char* str, int x, int y, uint32_t color) { (void)str; (void)x; (void)y; (void)color; }
 void gfx_draw_number_64(uint64_t num, int x, int y, uint32_t color) { (void)num; (void)x; (void)y; (void)color; }

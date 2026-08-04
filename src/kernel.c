@@ -10,7 +10,7 @@
 #include "../include/task.h"
 #include "../include/net.h"
 #include "../include/syscall.h"
-#include "../include/klibc.h" // PRECISA DO KLIBC AQUI!
+#include "../include/klibc.h"
 
 void task_music_loop(void) {
     while (1) {
@@ -21,11 +21,7 @@ void task_music_loop(void) {
 
 void kernel_main(multiboot_info_t* mbi) {
     serial_init();
-    
-    // PASSO 1 CRÍTICO: DETECTAR AVX2 ANTES DE ALOCAR OU DESENHAR QUALQUER COISA
-    klibc_init_cpu_features();
-
-    serial_write("[LOG SERIAL] KERNEL CAPIVARAOS 64-BIT ADVANCED (MLFQ + VMM + SIMD FALLBACK)\n");
+    serial_write("[LOG SERIAL] KERNEL CAPIVARAOS 64-BIT ADVANCED (MLFQ + VMM + SSE2 PURO)\n");
 
     memory_init(mbi);
     vmm_init();

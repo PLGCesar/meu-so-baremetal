@@ -4,9 +4,6 @@
 #include <stddef.h>
 #include <stdint.h>
 
-extern int avx2_supported;
-
-void klibc_init_cpu_features(void);
 void fast_memcpy(void* dest, const void* src, size_t n);
 void fast_memset(void* dest, uint8_t val, size_t n);
 

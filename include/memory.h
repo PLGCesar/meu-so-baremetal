@@ -5,8 +5,7 @@
 #include <stdint.h>
 #include "multiboot.h"
 
-// Mantemos o alinhamento de 32-Bytes. Se for SSE2 ele desperdiça 16 bytes de padding, mas garante segurança.
-#define ALIGNMENT_256 32
+#define ALIGNMENT_128 16
 
 typedef struct block_header {
     uint64_t magic;
@@ -15,10 +14,7 @@ typedef struct block_header {
     uint32_t padding;
     struct block_header* next;
     struct block_header* prev;
-    uint64_t pad_avx_1;
-    uint64_t pad_avx_2;
-    uint64_t pad_avx_3;
-} __attribute__((aligned(32))) block_header_t;
+} __attribute__((aligned(16))) block_header_t;
 
 void memory_init(multiboot_info_t* mbi);
 void* kmalloc(size_t size);
@@ -26,13 +22,12 @@ void* kcalloc(size_t num, size_t size);
 void* krealloc(void* ptr, size_t new_size);
 void kfree(void* ptr);
 
-// --- API DINÂMICA DE ALTA PERFORMANCE ---
-// Essas funções decidem internamente se usam AVX2 ou SSE2.
-void kfast_memset_zero(void* dest, size_t bytes);
-void kfast_memcpy(void* dest, const void* src, size_t bytes);
-void kfast_memset_color(void* dest, uint32_t color, size_t bytes);
+// API SIMD SSE2 128-BITS
+void kmemset128_zero(void* dest, size_t count_16);
+void kmemcpy128(void* dest, const void* src, size_t count_16);
+void kmemset128_color(void* dest, uint32_t color, size_t count_16);
 
-// --- PAGINAÇÃO AVANÇADA (VMM) ---
+// VMM
 void vmm_init(void);
 void vmm_map_page(uint64_t vaddr, uint64_t paddr, uint32_t flags);
 void vmm_protect_page(uint64_t vaddr, uint32_t flags);
