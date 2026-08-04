@@ -121,7 +121,7 @@ void gfx_swap_buffers(void) {
     if (bw == (int)active_width && bh == (int)active_height) {
         // Redraw Total de Tela (Wallpaper) - 256 Bits Puros (1/4 das iteracoes de memcpy normais)
         size_t blocks_32 = (total_pixels_64 * 4) >> 5;
-        kfast_memcpy(framebuffer, back_buffer, blocks_32);
+        kkfast_memcpy(framebuffer, back_buffer, blocks_32);
     } else {
         // Renderizacao Focada em Retangulos Sujos (Window Manager UI)
         size_t line_bytes = (size_t)bw * 4;
@@ -133,9 +133,9 @@ void gfx_swap_buffers(void) {
             uint8_t* dst = (uint8_t*)framebuffer + ((size_t)y * width + (size_t)dirty_min_x) * 4;
             
             // Joga no barramento VBE usando 256 bits AVX2!
-            if (blocks_32 > 0) kfast_memcpy(dst, src, blocks_32);
+            if (blocks_32 > 0) kkfast_memcpy(dst, src, blocks_32);
             // Resíduos pequenos usando string ops nativas do Klibc.
-            if (rem > 0) kfast_memcpy(dst + (blocks_32 << 5), src + (blocks_32 << 5), rem);
+            if (rem > 0) kkfast_memcpy(dst + (blocks_32 << 5), src + (blocks_32 << 5), rem);
         }
     }
 
@@ -156,7 +156,7 @@ void gfx_draw_rect(int x, int y, int w, int h, uint32_t color) {
     
     for (int i = start_y; i < end_y; i++) {
         uint8_t* row_ptr = (uint8_t*)(active_buffer + (i * active_width) + start_x);
-        if (blocks_32 > 0) kfast_memset_color(row_ptr, color, blocks_32);
+        if (blocks_32 > 0) kkfast_memset_zero_color(row_ptr, color, blocks_32);
         
         // Finaliza os resíduos (ex: se janela não é múltiplo de 32 bytes)
         if (rem > 0) {
@@ -197,8 +197,8 @@ void gfx_blit(uint32_t* src, int dx, int dy, int w, int h) {
         uint8_t* sour = (uint8_t*)(src + (src_y * w + src_x));
         
         // BLIT DE JANELAS EM VELOCIDADE AVX2! 
-        if (blocks_32 > 0) kfast_memcpy(dst, sour, blocks_32);
-        if (rem > 0) kfast_memcpy(dst + (blocks_32<<5), sour + (blocks_32<<5), rem);
+        if (blocks_32 > 0) kkfast_memcpy(dst, sour, blocks_32);
+        if (rem > 0) kkfast_memcpy(dst + (blocks_32<<5), sour + (blocks_32<<5), rem);
     }
     if (active_buffer == back_buffer) gfx_mark_dirty(start_x, start_y, copy_w, end_y - start_y);
 }
