@@ -9,6 +9,7 @@
 static uint16_t io_base = 0;
 static uint8_t mac_addr[6];
 static uint32_t my_ip = MAKE_IP(10, 0, 2, 15);
+static uint32_t dns_server = MAKE_IP(10, 0, 2, 3);
 static uint8_t* rx_buffer = NULL;
 static uint32_t rx_offset = 0;
 static uint32_t rx_count = 0;
@@ -51,7 +52,6 @@ void net_send_packet(const uint8_t* packet, uint32_t len) {
 
     tx_buffer_num = (tx_buffer_num + 1) % 4;
     tx_count++;
-    serial_write("[NET] Pacote Transmitido via RTL8139!\n");
 }
 
 uint16_t ip_checksum(void* vdata, size_t length) {
@@ -109,7 +109,73 @@ void net_send_udp(uint32_t dest_ip, uint16_t src_port, uint16_t dest_port, const
     fast_memcpy(data_ptr, payload, payload_len);
 
     net_send_packet(packet, (uint32_t)total_len);
-    serial_write("[NET UDP] Datagrama UDP transmitido ao Gateway QEMU!\n");
+}
+
+void net_send_ping(uint32_t dest_ip) {
+    uint8_t packet[98];
+    fast_memset(packet, 0, sizeof(packet));
+
+    ethernet_header_t* eth = (ethernet_header_t*)packet;
+    ipv4_header_t* ip = (ipv4_header_t*)(packet + sizeof(ethernet_header_t));
+    icmp_header_t* icmp = (icmp_header_t*)(packet + sizeof(ethernet_header_t) + sizeof(ipv4_header_t));
+
+    uint8_t qemu_gateway_mac[6] = {0x52, 0x54, 0x00, 0x12, 0x35, 0x02};
+    fast_memcpy(eth->dest_mac, qemu_gateway_mac, 6);
+    fast_memcpy(eth->src_mac, mac_addr, 6);
+    eth->type = __builtin_bswap16(0x0800);
+
+    ip->ver_ihl = 0x45;
+    ip->tos = 0;
+    ip->total_len = __builtin_bswap16(sizeof(ipv4_header_t) + sizeof(icmp_header_t) + 32);
+    ip->id = __builtin_bswap16(0x4321);
+    ip->flags_fragment = 0;
+    ip->ttl = 64;
+    ip->protocol = 1; // ICMP
+    ip->src_ip = my_ip;
+    ip->dest_ip = dest_ip;
+    ip->checksum = 0;
+    ip->checksum = ip_checksum(ip, sizeof(ipv4_header_t));
+
+    icmp->type = 8; // Echo Request
+    icmp->code = 0;
+    icmp->id = __builtin_bswap16(0x1337);
+    icmp->sequence = __builtin_bswap16(1);
+    icmp->checksum = 0;
+    icmp->checksum = ip_checksum(icmp, sizeof(icmp_header_t) + 32);
+
+    net_send_packet(packet, sizeof(packet));
+    serial_write("[NET] Pacote ICMP Echo Ping enviado!\n");
+}
+
+void net_send_dns_query(const char* domain) {
+    uint8_t dns_req[512];
+    fast_memset(dns_req, 0, sizeof(dns_req));
+
+    dns_req[0] = 0x12; dns_req[1] = 0x34; // Transaction ID
+    dns_req[2] = 0x01; dns_req[3] = 0x00; // Standard Query
+    dns_req[4] = 0x00; dns_req[5] = 0x01; // Questions = 1
+
+    uint8_t* qname = &dns_req[12];
+    int q_idx = 0;
+    size_t len = kstrlen(domain);
+
+    for (size_t i = 0; i < len; i++) {
+        size_t j = i;
+        while (j < len && domain[j] != '.') j++;
+        uint8_t label_len = (uint8_t)(j - i);
+        qname[q_idx++] = label_len;
+        for (size_t k = 0; k < label_len; k++) {
+            qname[q_idx++] = domain[i + k];
+        }
+        i = j;
+    }
+    qname[q_idx++] = 0; // Null terminator of labels
+
+    qname[q_idx++] = 0x00; qname[q_idx++] = 0x01; // Type A
+    qname[q_idx++] = 0x00; qname[q_idx++] = 0x01; // Class IN
+
+    net_send_udp(dns_server, 5353, 53, dns_req, 12 + q_idx);
+    serial_write("[NET DNS] Consulta DNS enviada para 10.0.2.3!\n");
 }
 
 void net_init(void) {
@@ -126,7 +192,7 @@ void net_init(void) {
     if (!io_base) io_base = 0xC000;
 
     outb(io_base + 0x52, 0x00);
-    outb(io_base + 0x37, 0x10);
+    outb(io_base + 0x37, 0x10); // Software reset
     while ((inb(io_base + 0x37) & 0x10) != 0);
 
     for (int i = 0; i < 6; i++) mac_addr[i] = inb(io_base + i);
@@ -136,74 +202,80 @@ void net_init(void) {
 
     outw(io_base + 0x3C, 0x0005);
     outl(io_base + 0x44, 0x0F);
-    outb(io_base + 0x37, 0x0C);
+    outb(io_base + 0x37, 0x0C); // Enable Receiver and Transmitter
 
-    serial_write("[NET] RTL8139 Inicializada no IP 10.0.2.15 com Suporte UDP!\n");
+    serial_write("[NET] RTL8139 Inicializada com Suporte a SLIRP (IP: 10.0.2.15)!\n");
 }
 
 void net_poll(void) {
     if (!io_base || !rx_buffer) return;
 
-    if ((inb(io_base + 0x37) & 0x01) == 0) {
+    if ((inb(io_base + 0x37) & 0x01) == 0) { // Buffer não vazio (BUFE == 0)
         uint8_t* pkt = rx_buffer + rx_offset;
-        ethernet_header_t* eth = (ethernet_header_t*)(pkt + 4);
+        uint16_t rx_status = *(uint16_t*)(pkt);
+        uint16_t pkt_len = *(uint16_t*)(pkt + 2);
 
-        rx_count++;
-        uint16_t eth_type = __builtin_bswap16(eth->type);
+        if ((rx_status & 0x01) && pkt_len > 0 && pkt_len < 1536) {
+            ethernet_header_t* eth = (ethernet_header_t*)(pkt + 4);
+            rx_count++;
+            uint16_t eth_type = __builtin_bswap16(eth->type);
 
-        if (eth_type == 0x0806) {
-            arp_packet_t* arp = (arp_packet_t*)(pkt + 4 + sizeof(ethernet_header_t));
-            if (__builtin_bswap16(arp->opcode) == 1 && arp->dest_ip == my_ip) {
-                uint8_t reply[64];
-                ethernet_header_t* r_eth = (ethernet_header_t*)reply;
-                arp_packet_t* r_arp = (arp_packet_t*)(reply + sizeof(ethernet_header_t));
-
-                fast_memcpy(r_eth->dest_mac, eth->src_mac, 6);
-                fast_memcpy(r_eth->src_mac, mac_addr, 6);
-                r_eth->type = __builtin_bswap16(0x0806);
-
-                r_arp->hw_type = __builtin_bswap16(1);
-                r_arp->proto_type = __builtin_bswap16(0x0800);
-                r_arp->hw_len = 6; r_arp->proto_len = 4;
-                r_arp->opcode = __builtin_bswap16(2);
-                fast_memcpy(r_arp->src_mac, mac_addr, 6);
-                r_arp->src_ip = my_ip;
-                fast_memcpy(r_arp->dest_mac, arp->src_mac, 6);
-                r_arp->dest_ip = arp->src_ip;
-
-                net_send_packet(reply, sizeof(ethernet_header_t) + sizeof(arp_packet_t));
-            }
-        } else if (eth_type == 0x0800) {
-            ipv4_header_t* ip = (ipv4_header_t*)(pkt + 4 + sizeof(ethernet_header_t));
-            if (ip->protocol == 1 && ip->dest_ip == my_ip) {
-                icmp_header_t* icmp = (icmp_header_t*)(pkt + 4 + sizeof(ethernet_header_t) + sizeof(ipv4_header_t));
-                if (icmp->type == 8) {
-                    uint8_t reply[128];
-                    fast_memcpy(reply, pkt + 4, 98);
-
+            if (eth_type == 0x0806) {
+                arp_packet_t* arp = (arp_packet_t*)(pkt + 4 + sizeof(ethernet_header_t));
+                if (__builtin_bswap16(arp->opcode) == 1 && arp->dest_ip == my_ip) {
+                    uint8_t reply[64];
                     ethernet_header_t* r_eth = (ethernet_header_t*)reply;
-                    ipv4_header_t* r_ip = (ipv4_header_t*)(reply + sizeof(ethernet_header_t));
-                    icmp_header_t* r_icmp = (icmp_header_t*)(reply + sizeof(ethernet_header_t) + sizeof(ipv4_header_t));
+                    arp_packet_t* r_arp = (arp_packet_t*)(reply + sizeof(ethernet_header_t));
 
                     fast_memcpy(r_eth->dest_mac, eth->src_mac, 6);
                     fast_memcpy(r_eth->src_mac, mac_addr, 6);
+                    r_eth->type = __builtin_bswap16(0x0806);
 
-                    r_ip->dest_ip = ip->src_ip;
-                    r_ip->src_ip = my_ip;
-                    r_ip->checksum = 0;
-                    r_ip->checksum = ip_checksum(r_ip, sizeof(ipv4_header_t));
+                    r_arp->hw_type = __builtin_bswap16(1);
+                    r_arp->proto_type = __builtin_bswap16(0x0800);
+                    r_arp->hw_len = 6; r_arp->proto_len = 4;
+                    r_arp->opcode = __builtin_bswap16(2);
+                    fast_memcpy(r_arp->src_mac, mac_addr, 6);
+                    r_arp->src_ip = my_ip;
+                    fast_memcpy(r_arp->dest_mac, arp->src_mac, 6);
+                    r_arp->dest_ip = arp->src_ip;
 
-                    r_icmp->type = 0;
-                    r_icmp->checksum = 0;
-                    r_icmp->checksum = ip_checksum(r_icmp, 64);
+                    net_send_packet(reply, sizeof(ethernet_header_t) + sizeof(arp_packet_t));
+                }
+            } else if (eth_type == 0x0800) {
+                ipv4_header_t* ip = (ipv4_header_t*)(pkt + 4 + sizeof(ethernet_header_t));
+                if (ip->protocol == 1 && ip->dest_ip == my_ip) {
+                    icmp_header_t* icmp = (icmp_header_t*)(pkt + 4 + sizeof(ethernet_header_t) + sizeof(ipv4_header_t));
+                    if (icmp->type == 8) { // Echo Request
+                        uint8_t reply[128];
+                        fast_memcpy(reply, pkt + 4, 98);
 
-                    net_send_packet(reply, 98);
+                        ethernet_header_t* r_eth = (ethernet_header_t*)reply;
+                        ipv4_header_t* r_ip = (ipv4_header_t*)(reply + sizeof(ethernet_header_t));
+                        icmp_header_t* r_icmp = (icmp_header_t*)(reply + sizeof(ethernet_header_t) + sizeof(ipv4_header_t));
+
+                        fast_memcpy(r_eth->dest_mac, eth->src_mac, 6);
+                        fast_memcpy(r_eth->src_mac, mac_addr, 6);
+
+                        r_ip->dest_ip = ip->src_ip;
+                        r_ip->src_ip = my_ip;
+                        r_ip->checksum = 0;
+                        r_ip->checksum = ip_checksum(r_ip, sizeof(ipv4_header_t));
+
+                        r_icmp->type = 0;
+                        r_icmp->checksum = 0;
+                        r_icmp->checksum = ip_checksum(r_icmp, 64);
+
+                        net_send_packet(reply, 98);
+                    }
                 }
             }
         }
 
-        rx_offset = (rx_offset + 1536) % 8192;
-        outw(io_base + 0x38, rx_offset - 16);
+        // Avança o ponteiro do Ring Buffer RTL8139 com alinhamento real de DWORD
+        rx_offset = (rx_offset + pkt_len + 4 + 3) & ~3;
+        rx_offset %= 8192;
+        outw(io_base + 0x38, (uint16_t)(rx_offset - 0x10));
     }
 }
 

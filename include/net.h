@@ -43,7 +43,6 @@ typedef struct __attribute__((packed)) {
     uint16_t sequence;
 } icmp_header_t;
 
-// ESTRUTURA CABECALHO UDP (8 BYTES PERFEITOS)
 typedef struct __attribute__((packed)) {
     uint16_t src_port;
     uint16_t dest_port;
@@ -55,6 +54,8 @@ void net_init(void);
 void net_poll(void);
 void net_send_packet(const uint8_t* packet, uint32_t len);
 void net_send_udp(uint32_t dest_ip, uint16_t src_port, uint16_t dest_port, const void* payload, size_t payload_len);
+void net_send_ping(uint32_t dest_ip);
+void net_send_dns_query(const char* domain);
 
 const uint8_t* net_get_mac(void);
 uint32_t net_get_ip(void);

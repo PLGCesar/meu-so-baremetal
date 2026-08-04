@@ -13,6 +13,7 @@
 #include "../include/elf.h"
 #include "../include/net.h"
 #include "../include/bgif.h"
+#include "../include/ahci.h"
 
 #define MAX_WINDOWS 13
 
@@ -34,7 +35,7 @@ static int bgif_wallpaper_frame = 0;
 static int start_menu_open = 0, gallery_photo = 0;
 
 static char input_buffer[32]; static int input_index = 0;
-static char shell_output[128] = "SISTEMA VFS & PLAYER DE VIDEO BGIF PRONTOS!";
+static char shell_output[128] = "CAPIVARAOS INTERNET & DISCO SATA PRONTOS!";
 static uint32_t paint_canvas[160 * 120]; static uint32_t paint_color = 0xFFFFFF;
 static int prev_mouse_left = 0;
 static int prev_mouse_x = -1, prev_mouse_y = -1;
@@ -196,9 +197,18 @@ void ui_init(void) {
 static void process_shell_command(void) {
     for (int i = 0; i < 128; i++) shell_output[i] = '\0';
     if (kstrcmp(input_buffer, "help") == 0) {
-        kstrcpy(shell_output, "COMANDOS: LS, CAT <ARQ>, WRITE <ARQ> <TEXTO>, RUN <ELF>, UDP <MSG>");
+        kstrcpy(shell_output, "COMANDOS: LS, CAT, WRITE, RUN, PING, DNS, DISKINFO");
     } else if (kstrcmp(input_buffer, "ls") == 0) {
         vfs_list(shell_output, 128);
+    } else if (kstrcmp(input_buffer, "diskinfo") == 0) {
+        kstrcpy(shell_output, ahci_get_status_string());
+    } else if (kstrncmp(input_buffer, "ping ", 5) == 0) {
+        uint32_t target_ip = ((uint32_t)(10) | ((uint32_t)(0) << 8) | ((uint32_t)(2) << 16) | ((uint32_t)(2) << 24));
+        net_send_ping(target_ip);
+        kstrcpy(shell_output, "DISPARADO ICMP PING PARA 10.0.2.2 (GATEWAY QEMU)!");
+    } else if (kstrncmp(input_buffer, "dns ", 4) == 0) {
+        net_send_dns_query(input_buffer + 4);
+        kstrcpy(shell_output, "CONSULTA DNS ENVIADA PARA 10.0.2.3 (PORTA 53)!");
     } else if (kstrncmp(input_buffer, "cat ", 4) == 0) {
         size_t sz = 0;
         const uint8_t* content = vfs_read(input_buffer + 4, &sz);
@@ -225,10 +235,6 @@ static void process_shell_command(void) {
         } else {
             kstrcpy(shell_output, "ERRO AO CARREGAR EXECUTAVEL ELF!");
         }
-    } else if (kstrncmp(input_buffer, "udp ", 4) == 0) {
-        uint32_t target_ip = ((uint32_t)(10) | ((uint32_t)(0) << 8) | ((uint32_t)(2) << 16) | ((uint32_t)(2) << 24));
-        net_send_udp(target_ip, 12345, 8888, input_buffer + 4, kstrlen(input_buffer + 4));
-        kstrcpy(shell_output, "PACOTE UDP ENVIADO PARA 10.0.2.2:8888!");
     } else if (kstrcmp(input_buffer, "clear") == 0) {
         shell_output[0] = '\0';
     }
@@ -525,9 +531,13 @@ void draw_single_window(window_t* w) {
         gfx_draw_number_64(memory_get_total_allocated(), win_x + 220, win_y + 120, COLOR_GREEN);
         gfx_draw_string(" BYTES", win_x + 290, win_y + 120, COLOR_WHITE);
     } else if (w->app_type == 2) {
-        gfx_draw_string("DIAGNOSTICO DA PLACA DE REDE REALTEK RTL8139:", win_x + 30, win_y + 45, COLOR_GREEN);
+        gfx_draw_string("DIAGNOSTICO DE REDE E STATUS HARDWARE:", win_x + 30, win_y + 45, COLOR_GREEN);
         gfx_draw_rect(win_x + 30, win_y + 70, win_w - 60, 350, COLOR_NAVY);
-        gfx_draw_string("STATUS DA PLACA: REALTEK RTL8139 (PCI) - ONLINE", win_x + 50, win_y + 100, COLOR_GREEN);
+        gfx_draw_string("PLACA DE REDE: REALTEK RTL8139 (PCI) - ONLINE", win_x + 50, win_y + 100, COLOR_GREEN);
+        gfx_draw_string("IP LOCAL: 10.0.2.15 (SUBNETE SLIRP QEMU)", win_x + 50, win_y + 130, COLOR_WHITE);
+        gfx_draw_string("GATEWAY: 10.0.2.2  |  SERVIDOR DNS: 10.0.2.3", win_x + 50, win_y + 160, COLOR_YELLOW);
+        gfx_draw_string("DRIVE DISCO: ", win_x + 50, win_y + 200, COLOR_WHITE);
+        gfx_draw_string(ahci_get_status_string(), win_x + 160, win_y + 200, COLOR_GREEN);
     } else if (w->app_type == 3) {
         int canvas_x = win_x + 30, canvas_y = win_y + 55, canvas_w = 520, canvas_h = 300;
         if (gallery_photo == 0) gfx_draw_landscape_sunset(canvas_x, canvas_y, canvas_w, canvas_h);
@@ -664,20 +674,20 @@ void draw_single_window(window_t* w) {
             }
         }
     } else if (w->app_type == 11) {
-        gfx_draw_string("LOGS DE ATUALIZACAO - CAPIVARAOS v1.4:", win_x + 20, win_y + 45, COLOR_GREEN);
+        gfx_draw_string("LOGS DE ATUALIZACAO - CAPIVARAOS v1.5:", win_x + 20, win_y + 45, COLOR_GREEN);
         gfx_draw_rect(win_x + 20, win_y + 70, win_w - 40, 380, COLOR_NAVY);
 
-        gfx_draw_string("VERSAO ATUAL: CapivaraOS 64-bit v1.4", win_x + 35, win_y + 90, COLOR_YELLOW);
+        gfx_draw_string("VERSAO ATUAL: CapivaraOS 64-bit v1.5 (AHCI + SLIRP)", win_x + 35, win_y + 90, COLOR_YELLOW);
         gfx_draw_string("--------------------------------------------", win_x + 35, win_y + 110, COLOR_GRAY);
 
-        gfx_draw_string("[+] ADICIONADO: Renderizador Delta de Video BGIF", win_x + 35, win_y + 130, COLOR_GREEN);
-        gfx_draw_string("[+] ADICIONADO: Suporte a Letras Acentuadas e Cedilha", win_x + 35, win_y + 150, COLOR_GREEN);
-        gfx_draw_string("[+] ADICIONADO: Suporte a Teclas SHIFT, Caps e Simbolos", win_x + 35, win_y + 170, COLOR_GREEN);
+        gfx_draw_string("[+] NOVO: Driver AHCI SATA Nativo com Bus Master DMA", win_x + 35, win_y + 130, COLOR_GREEN);
+        gfx_draw_string("[+] NOVO: Cliente DNS (UDP 53) e Ping ICMP Reais", win_x + 35, win_y + 150, COLOR_GREEN);
+        gfx_draw_string("[+] NOVO: Comando 'diskinfo', 'ping' e 'dns' no Shell", win_x + 35, win_y + 170, COLOR_GREEN);
 
-        gfx_draw_string("[*] OTIMIZADO: Alinhamento de Memoria de 16 Bytes (SIMD)", win_x + 35, win_y + 200, COLOR_BLUE);
-        gfx_draw_string("[*] OTIMIZADO: Escalonador Fallback e Teclado/Mouse PS/2", win_x + 35, win_y + 220, COLOR_BLUE);
+        gfx_draw_string("[*] CORRIGIDO: Avanço real de offset do Ring Buffer RTL8139", win_x + 35, win_y + 200, COLOR_BLUE);
+        gfx_draw_string("[*] CORRIGIDO: Queda de ciclo de CPU na leitura de disco", win_x + 35, win_y + 220, COLOR_BLUE);
 
-        gfx_draw_string("[-] REMOVIDO: Redesenho integral desnecessario por quadro", win_x + 35, win_y + 250, COLOR_RED);
+        gfx_draw_string("[-] REMOVIDO: Espera ativa PIO do modo ATA/IDE legado", win_x + 35, win_y + 250, COLOR_RED);
     } else if (w->app_type == 12) {
         gfx_draw_string("CAPIVARAPAD - BLOCO DE NOTAS DIGITAVEL:", win_x + 20, win_y + 45, COLOR_GREEN);
         gfx_draw_rect(win_x + 20, win_y + 70, win_w - 40, 330, COLOR_WHITE);

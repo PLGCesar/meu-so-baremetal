@@ -1,4 +1,5 @@
 #include "../include/ata.h"
+#include "../include/ahci.h"
 #include "../include/serial.h"
 #include "../include/task.h"
 
@@ -17,10 +18,9 @@ static inline void outw(uint16_t port, uint16_t val) {
     asm volatile ("outw %0, %1" : : "a"(val), "Nd"(port));
 }
 
-// Controle de Spinlock Inteligente para I/O Concorrente Seguro
 static void acquire_ata(void) {
     while (__sync_lock_test_and_set(&ata_lock, 1)) {
-        if (get_num_tasks() > 1) task_yield(); // Assíncrono se houver outras threads
+        if (get_num_tasks() > 1) task_yield();
         else asm volatile("pause");
     }
 }
@@ -28,7 +28,6 @@ static void release_ata(void) {
     __sync_lock_release(&ata_lock);
 }
 
-// Remove o CPU-burning e implementa I/O Cooperativo/Assíncrono no driver
 static void ata_wait_bsy(void) {
     while (inb(0x1F7) & 0x80) {
         if (get_num_tasks() > 1) task_yield();
@@ -43,10 +42,19 @@ static void ata_wait_drq(void) {
 }
 
 void ata_init(void) {
-    serial_write("[ATA] Driver de Disco Rigido (Async/Lock Free) Inicializado!\n");
+    ahci_init();
+    if (ahci_is_active()) {
+        serial_write("[STORAGE] Camada de Disco Inicializada com Controlador AHCI SATA DMA!\n");
+    } else {
+        serial_write("[STORAGE] Camada de Disco Inicializada no modo ATA/IDE Legado!\n");
+    }
 }
 
 int ata_read_sector(uint32_t lba, uint8_t* buffer) {
+    if (ahci_is_active()) {
+        return ahci_read_sector(lba, buffer);
+    }
+
     acquire_ata();
     ata_wait_bsy();
     outb(0x1F6, 0xE0 | ((lba >> 24) & 0x0F));
@@ -69,6 +77,10 @@ int ata_read_sector(uint32_t lba, uint8_t* buffer) {
 }
 
 int ata_write_sector(uint32_t lba, const uint8_t* buffer) {
+    if (ahci_is_active()) {
+        return ahci_write_sector(lba, buffer);
+    }
+
     acquire_ata();
     ata_wait_bsy();
     outb(0x1F6, 0xE0 | ((lba >> 24) & 0x0F));
