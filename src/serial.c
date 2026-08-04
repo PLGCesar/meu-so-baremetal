@@ -49,7 +49,7 @@ int is_transmit_empty(void) {
 
 int serial_has_data(void) {
     uint8_t status = inb(PORT + 5);
-    if (status == 0xFF) return 0; // Proteção para porta desconectada/ausente
+    if (status == 0xFF) return 0; // Se a porta não existir/flutuante, retorna 0
     return (status & 0x01);
 }
 
@@ -137,7 +137,7 @@ static void process_serial_host_cmd(const char* cmd) {
 }
 
 void serial_poll(void) {
-    int max_bytes = 64; // Não bloqueia rendering da interface gráfica
+    int max_bytes = 64; // Não bloqueia o loop da interface gráfica
     while (serial_has_data() && max_bytes-- > 0) {
         uint8_t b = inb(PORT);
         if (b == 0xFF) break;

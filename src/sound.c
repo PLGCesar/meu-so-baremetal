@@ -26,24 +26,24 @@ void sound_stop(void) {
     outb(0x61, tmp);
 }
 
-// PAUSA SEM GASTAR CPU (HLT ATE O TIMER PIT CONTINUAR)
+// Pausa baseada em spin-loop da CPU para não depender da interrupção PIT estar ativa
 static void delay_ticks(uint64_t ticks) {
-    uint64_t start = get_system_ticks();
-    while (get_system_ticks() - start < ticks) {
-        asm volatile ("hlt");
+    if (ticks == 0) return;
+    for (volatile uint64_t i = 0; i < ticks * 3000000ULL; i++) {
+        asm volatile ("nop");
     }
 }
 
 void sound_click(void) {
     sound_play(1200);
-    delay_ticks(1); // 10ms
+    delay_ticks(1);
     sound_stop();
 }
 
 void sound_startup(void) {
-    sound_play(523);  delay_ticks(8);
-    sound_play(659);  delay_ticks(8);
-    sound_play(784);  delay_ticks(8);
-    sound_play(1046); delay_ticks(15);
+    sound_play(523);  delay_ticks(2);
+    sound_play(659);  delay_ticks(2);
+    sound_play(784);  delay_ticks(2);
+    sound_play(1046); delay_ticks(3);
     sound_stop();
 }

@@ -35,10 +35,11 @@ void kernel_main(multiboot_info_t* mbi) {
     idt_init();
 
     task_create(task_music_loop, "Chiptune_Synthesizer", 3);
-    sound_startup();
 
-    // Habilita interrupções somente após todos os subsistemas estarem inicializados!
+    // Habilita interrupções de hardware com segurança
     asm volatile ("sti");
+
+    sound_startup();
 
     while (1) {
         serial_poll();

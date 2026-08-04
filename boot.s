@@ -183,12 +183,11 @@ isr0_stub:
     POP_ALL
     iretq
 
-/* EXCEÇÕES DE PROTEÇÃO COM TRATAMENTO DE ERROR CODE (PREVENÇÃO DE TRIPLE FAULT) */
 .global isr8_stub
 .extern exception8_handler
 isr8_stub:
     PUSH_ALL
-    mov 120(%rsp), %rdi /* Error Code injetado pela CPU na Stack */
+    mov 120(%rsp), %rdi
     mov %rsp, %rbp
     and $-16, %rsp
     call exception8_handler
