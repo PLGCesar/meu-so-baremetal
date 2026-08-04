@@ -10,20 +10,25 @@
 #include "../include/task.h"
 #include "../include/net.h"
 #include "../include/syscall.h"
+#include "../include/klibc.h" // PRECISA DO KLIBC AQUI!
 
 void task_music_loop(void) {
     while (1) {
         music_update();
-        task_yield(); // Otimização para E/S e Multitarefas
+        task_yield();
     }
 }
 
 void kernel_main(multiboot_info_t* mbi) {
     serial_init();
-    serial_write("[LOG SERIAL] KERNEL CAPIVARAOS 64-BIT ADVANCED (MLFQ + VMM) \n");
+    
+    // PASSO 1 CRÍTICO: DETECTAR AVX2 ANTES DE ALOCAR OU DESENHAR QUALQUER COISA
+    klibc_init_cpu_features();
+
+    serial_write("[LOG SERIAL] KERNEL CAPIVARAOS 64-BIT ADVANCED (MLFQ + VMM + SIMD FALLBACK)\n");
 
     memory_init(mbi);
-    vmm_init(); // Ativa Proteção de Paginação PML4
+    vmm_init();
     
     gfx_init(mbi);
     idt_init();
@@ -31,18 +36,16 @@ void kernel_main(multiboot_info_t* mbi) {
     ui_init();
 
     syscall_init();
-
     task_init();
-    task_create(task_music_loop, "Chiptune_Synthesizer", 3); // Prioridade 3
+    task_create(task_music_loop, "Chiptune_Synthesizer", 3);
 
     sound_startup();
-    serial_write("[LOG SERIAL] Excecoes da IDT Protegidas contra Triple-Fault!\n");
 
     while (1) {
         ui_handle_mouse();
         ui_handle_keyboard();
         net_poll();
         ui_render();
-        task_yield(); // Cedendo ciclos ociosos para o Escalonador Assíncrono (-O3 Friendly)
+        task_yield();
     }
 }
