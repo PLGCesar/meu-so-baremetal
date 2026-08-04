@@ -38,7 +38,7 @@ int main(void) {
 
     for (int frame = 0; frame < FRAMES; frame++) {
         float angle = (frame * 3.14159265f * 2.0f) / FRAMES;
-        int cx = WIDTH / 2 + (int)(sinf(angle) * 35.0f);
+        int cx = WIDTH / 2 + (int)(isinf(angle) * 35.0f);
         int cy = HEIGHT / 2 + (int)(cosf(angle) * 25.0f);
 
         for (int y = 0; y < HEIGHT; y++) {

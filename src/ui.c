@@ -167,7 +167,7 @@ void ui_init(void) {
     windows[10]= (window_t){10, 10, 300, 150, 200, 260, 0, 11, NULL};
     windows[11]= (window_t){11, 11, 220, 100, 600, 480, 0, 12, NULL};
     windows[12]= (window_t){12, 12, 180, 70,  620, 480, 0, 13, NULL};
-    windows[13]= (window_t){13, 13, 200, 90,  620, 500, 0, 14, NULL};
+    windows[13]= (window_t){13, 13, 200, 90,  620, 480, 0, 14, NULL};
 
     for (int i = 0; i < MAX_WINDOWS; i++) {
         window_t* w = &windows[i];
@@ -379,7 +379,7 @@ void ui_handle_mouse(void) {
             }
 
             if (w->app_type == 13 && mouse_y >= w->y + 420 && mouse_y <= w->y + 455) {
-                if (mouse_x >= w->x + 30 && mouse_x <= w->x + 240 && serial_guest_idx > 0) {
+                if (mouse_x >= w->x + 20 && mouse_x <= w->x + 240 && serial_guest_idx > 0) {
                     serial_send_custom(serial_guest_input);
                     serial_guest_input[0] = '\0';
                     serial_guest_idx = 0;
@@ -739,17 +739,37 @@ void draw_single_window(window_t* w) {
         gfx_draw_string("TERMINAL SERIAL HOST (BIDIRECIONAL COM1):", win_x + 20, win_y + 45, COLOR_GREEN);
         gfx_draw_rect(win_x + 20, win_y + 70, win_w - 40, 290, COLOR_NAVY);
 
-        gfx_draw_string(serial_get_log(), win_x + 30, win_y + 80, COLOR_WHITE);
+        // Renderização segura com quebra de linha tratada
+        const char* log = serial_get_log();
+        int cur_x = win_x + 30;
+        int cur_y = win_y + 80;
+        int max_y = win_y + 340;
 
-        gfx_draw_string("MENSAGEM DO GUEST PARA O HOST:", win_x + 20, win_y + 375, COLOR_YELLOW);
-        gfx_draw_rect(win_x + 20, win_y + 390, win_w - 40, 25, COLOR_NAVY);
-        gfx_draw_string(serial_guest_input, win_x + 25, win_y + 398, COLOR_WHITE);
+        for (int i = 0; log[i] != '\0' && cur_y < max_y; i++) {
+            if (log[i] == '\n') {
+                cur_x = win_x + 30;
+                cur_y += 12;
+            } else if (log[i] >= 32 && log[i] <= 126) {
+                if (cur_x + 8 > win_x + win_w - 30) {
+                    cur_x = win_x + 30;
+                    cur_y += 12;
+                }
+                if (cur_y < max_y) {
+                    gfx_draw_char(log[i], cur_x, cur_y, COLOR_WHITE);
+                    cur_x += 8;
+                }
+            }
+        }
 
-        int btn_s_y = win_y + 425;
+        gfx_draw_string("MENSAGEM DO GUEST PARA O HOST:", win_x + 20, win_y + 370, COLOR_YELLOW);
+        gfx_draw_rect(win_x + 20, win_y + 385, win_w - 40, 25, COLOR_NAVY);
+        gfx_draw_string(serial_guest_input, win_x + 25, win_y + 393, COLOR_WHITE);
+
+        int btn_s_y = win_y + 420;
         gfx_draw_rect(win_x + 20, btn_s_y, 220, 35, COLOR_GREEN);
         gfx_draw_string("ENVIAR VIA SERIAL", win_x + 40, btn_s_y + 12, COLOR_NAVY);
 
-        gfx_draw_string("HOST COMANDO: cat <nome_arquivo>", win_x + 260, btn_s_y + 12, COLOR_YELLOW);
+        gfx_draw_string("HOST: cat <arquivo> | ls | echo <msg>", win_x + 260, btn_s_y + 12, COLOR_YELLOW);
     }
 }
 
