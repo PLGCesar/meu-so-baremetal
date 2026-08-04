@@ -146,7 +146,6 @@ void gfx_reset_dirty(void) {
 int gfx_is_dirty(void) { return dirty_active; }
 
 void gfx_init(multiboot_info_t* mbi) {
-    (void)mbi;
     outw(0x01CE, 4); outw(0x01CF, 0);
     outw(0x01CE, 1); outw(0x01CF, 1024);
     outw(0x01CE, 2); outw(0x01CF, 768);
@@ -155,12 +154,20 @@ void gfx_init(multiboot_info_t* mbi) {
 
     width = 1024; height = 768; pitch = 4096; total_pixels_64 = width * height;
 
-    for (uint8_t slot = 0; slot < 32; slot++) {
-        uint32_t id = pci_read_config(0, slot, 0, 0);
-        if ((id & 0xFFFF) == 0x1234) {
-            uint32_t bar0 = pci_read_config(0, slot, 0, 0x10);
-            framebuffer = (uint32_t*)(uintptr_t)(bar0 & 0xFFFFFFF0);
-            break;
+    if (mbi && (mbi->flags & (1 << 12)) && mbi->framebuffer_addr != 0) {
+        framebuffer = (uint32_t*)(uintptr_t)mbi->framebuffer_addr;
+    }
+
+    if (!framebuffer) {
+        for (uint8_t slot = 0; slot < 32; slot++) {
+            uint32_t id = pci_read_config(0, slot, 0, 0);
+            if ((id & 0xFFFF) == 0x1234) {
+                uint32_t bar0 = pci_read_config(0, slot, 0, 0x10);
+                if ((bar0 & 0xFFFFFFF0) != 0) {
+                    framebuffer = (uint32_t*)(uintptr_t)(bar0 & 0xFFFFFFF0);
+                    break;
+                }
+            }
         }
     }
     if (!framebuffer) framebuffer = (uint32_t*)0xFD000000;

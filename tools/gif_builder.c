@@ -48,12 +48,10 @@ int main(void) {
                 int dist2 = dx*dx + dy*dy;
 
                 uint8_t r = 0, g = 0, b = 0;
-                // Fundo gradiente cósmico ESTÁVEL entre quadros (permite descarte pelo renderizador Delta)
                 r = (uint8_t)((x * 40) / WIDTH + 10);
                 g = (uint8_t)((y * 30) / HEIGHT + 5);
                 b = (uint8_t)(35 + (x * 20) / WIDTH);
 
-                // Esfera animada com gradiente suave
                 if (dist2 < 900) {
                     int intensity = (900 - dist2) * 255 / 900;
                     r = (uint8_t)(intensity > 255 ? 255 : intensity);

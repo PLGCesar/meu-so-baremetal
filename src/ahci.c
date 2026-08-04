@@ -23,6 +23,7 @@ static void pci_write_config(uint8_t bus, uint8_t slot, uint8_t func, uint8_t of
 }
 
 static int check_port_type(hba_port_t* port) {
+    if (!port) return AHCI_DEV_NULL;
     uint32_t ssts = port->ssts;
     uint8_t ipm = (ssts >> 8) & 0x0F;
     uint8_t det = ssts & 0x0F;
@@ -33,11 +34,20 @@ static int check_port_type(hba_port_t* port) {
     return port->sig;
 }
 
-static void port_rebase(hba_port_t* port, int portno) {
+static int port_rebase(hba_port_t* port, int portno) {
     (void)portno;
     port->cmd &= ~0x0001; // CMD_ST
     port->cmd &= ~0x0010; // CMD_FRE
-    while (port->cmd & 0x4000); // CMD_CR
+
+    // Timeout de segurança para evitar loop infinito/tela preta
+    int timeout = 100000;
+    while ((port->cmd & 0x4000) && --timeout > 0) {
+        asm volatile("pause");
+    }
+    if (timeout <= 0) {
+        serial_write("[AHCI] Timeout de porta em port_rebase. Abortando AHCI.\n");
+        return 0;
+    }
 
     void* raw_clb = kmalloc(4096 + 1024);
     uintptr_t clb_aligned = ((uintptr_t)raw_clb + 1023) & ~1023;
@@ -65,30 +75,39 @@ static void port_rebase(hba_port_t* port, int portno) {
 
     port->cmd |= 0x0010; // CMD_FRE
     port->cmd |= 0x0001; // CMD_ST
+    return 1;
 }
 
 void ahci_init(void) {
-    serial_write("[AHCI] Procurando Controlador SATA PCIe...\n");
+    serial_write("[AHCI] Procurando Controlador AHCI SATA PCI...\n");
     for (uint8_t bus = 0; bus < 8; bus++) {
         for (uint8_t slot = 0; slot < 32; slot++) {
             for (uint8_t func = 0; func < 8; func++) {
+                uint32_t id = pci_read_config(bus, slot, func, 0x00);
+                if (id == 0xFFFFFFFF || id == 0) continue;
+
                 uint32_t class_reg = pci_read_config(bus, slot, func, 0x08);
                 uint8_t class_code = (class_reg >> 24) & 0xFF;
                 uint8_t subclass   = (class_reg >> 16) & 0xFF;
 
-                if (class_code == 0x01 && subclass == 0x06) { // Mass Storage & SATA
-                    serial_write("[AHCI] Controlador SATA AHCI Encontrado no PCI!\n");
+                if (class_code == 0x01 && subclass == 0x06) {
+                    serial_write("[AHCI] Controlador AHCI SATA PCI Encontrado!\n");
 
-                    // Habilita PCI Memory Space (bit 1) e Bus Mastering DMA (bit 2)
+                    // Habilita IO, Memory Space e Bus Master DMA
                     uint32_t pci_cmd = pci_read_config(bus, slot, func, 0x04);
-                    pci_cmd |= (1 << 1) | (1 << 2);
+                    pci_cmd |= 0x07;
                     pci_write_config(bus, slot, func, 0x04, pci_cmd);
 
                     uint32_t bar5 = pci_read_config(bus, slot, func, 0x24);
-                    abar = (hba_mem_t*)(uintptr_t)(bar5 & ~0x0F);
+                    uintptr_t bar_addr = bar5 & 0xFFFFFFF0;
 
-                    if (!abar) abar = (hba_mem_t*)0xFE000000;
+                    // CORREÇÃO CRÍTICA: Se o BAR5 for 0, atribui 0xFE000000 no registrador do dispositivo PCI
+                    if (bar_addr == 0 || bar_addr == 0xFFFFFFF0) {
+                        bar_addr = 0xFE000000;
+                        pci_write_config(bus, slot, func, 0x24, (uint32_t)bar_addr);
+                    }
 
+                    abar = (hba_mem_t*)bar_addr;
                     abar->ghc |= (1 << 31); // Global AHCI Enable
 
                     uint32_t pi = abar->pi;
@@ -96,11 +115,12 @@ void ahci_init(void) {
                         if (pi & (1 << i)) {
                             int dt = check_port_type(&abar->ports[i]);
                             if (dt == AHCI_DEV_SATA) {
-                                serial_write("[AHCI] Disco SATA Físico/Virtual Ativo no Port!\n");
-                                active_sata_port = i;
-                                port_rebase(&abar->ports[i], i);
-                                ahci_initialized = 1;
-                                return;
+                                serial_write("[AHCI] Disco SATA Ativo Detectado no Port!\n");
+                                if (port_rebase(&abar->ports[i], i)) {
+                                    active_sata_port = i;
+                                    ahci_initialized = 1;
+                                    return;
+                                }
                             }
                         }
                     }
@@ -108,7 +128,7 @@ void ahci_init(void) {
             }
         }
     }
-    serial_write("[AHCI] Nenhum AHCI PCI encontrado. Usando fallback ATA/IDE.\n");
+    serial_write("[AHCI] Nenhum controlador SATA AHCI pronto. Ativando Fallback IDE.\n");
 }
 
 int ahci_is_active(void) {
@@ -117,7 +137,7 @@ int ahci_is_active(void) {
 
 const char* ahci_get_status_string(void) {
     if (ahci_is_active()) return "SATA AHCI DMA (6 Gbps) - ATIVO";
-    return "ATA IDE LEGAO (PIO Mode) - FALLBACK";
+    return "ATA IDE LEGADO (PIO Mode) - FALLBACK";
 }
 
 int ahci_read_sector(uint32_t lba, uint8_t* buffer) {
@@ -128,7 +148,7 @@ int ahci_read_sector(uint32_t lba, uint8_t* buffer) {
 
     hba_cmd_header_t* cmdheader = (hba_cmd_header_t*)(uintptr_t)port->clb;
     cmdheader->cfl = sizeof(fis_reg_h2d_t)/sizeof(uint32_t);
-    cmdheader->w = 0; // Read operation
+    cmdheader->w = 0;
     cmdheader->prdtl = 1;
 
     hba_cmd_tbl_t* cmdtbl = (hba_cmd_tbl_t*)(uintptr_t)cmdheader->ctba;
@@ -136,18 +156,18 @@ int ahci_read_sector(uint32_t lba, uint8_t* buffer) {
 
     cmdtbl->prdt_entry[0].dba = (uint32_t)(uintptr_t)buffer;
     cmdtbl->prdt_entry[0].dbau = 0;
-    cmdtbl->prdt_entry[0].dbc = 511; // 512 Bytes
+    cmdtbl->prdt_entry[0].dbc = 511;
     cmdtbl->prdt_entry[0].i = 1;
 
     fis_reg_h2d_t* cmdfis = (fis_reg_h2d_t*)(&cmdtbl->cfis);
-    cmdfis->fis_type = 0x27; // Register FIS - Host to Device
-    cmdfis->c = 1; // Command
+    cmdfis->fis_type = 0x27;
+    cmdfis->c = 1;
     cmdfis->command = ATA_CMD_READ_DMA_EX;
 
     cmdfis->lba0 = (uint8_t)lba;
     cmdfis->lba1 = (uint8_t)(lba >> 8);
     cmdfis->lba2 = (uint8_t)(lba >> 16);
-    cmdfis->device = 1 << 6; // LBA mode
+    cmdfis->device = 1 << 6;
 
     cmdfis->lba3 = (uint8_t)(lba >> 24);
     cmdfis->lba4 = 0;
@@ -156,14 +176,14 @@ int ahci_read_sector(uint32_t lba, uint8_t* buffer) {
     cmdfis->countl = 1;
     cmdfis->counth = 0;
 
-    port->ci = 1; // Issue command
+    port->ci = 1;
 
-    while (1) {
+    int timeout = 1000000;
+    while (--timeout > 0) {
         if ((port->ci & 1) == 0) break;
-        if (port->is & (1 << 30)) { // Error
-            return 0;
-        }
+        if (port->is & (1 << 30)) return 0;
     }
+    if (timeout <= 0) return 0;
 
     return 1;
 }
@@ -176,7 +196,7 @@ int ahci_write_sector(uint32_t lba, const uint8_t* buffer) {
 
     hba_cmd_header_t* cmdheader = (hba_cmd_header_t*)(uintptr_t)port->clb;
     cmdheader->cfl = sizeof(fis_reg_h2d_t)/sizeof(uint32_t);
-    cmdheader->w = 1; // Write operation
+    cmdheader->w = 1;
     cmdheader->prdtl = 1;
 
     hba_cmd_tbl_t* cmdtbl = (hba_cmd_tbl_t*)(uintptr_t)cmdheader->ctba;
@@ -206,10 +226,12 @@ int ahci_write_sector(uint32_t lba, const uint8_t* buffer) {
 
     port->ci = 1;
 
-    while (1) {
+    int timeout = 1000000;
+    while (--timeout > 0) {
         if ((port->ci & 1) == 0) break;
         if (port->is & (1 << 30)) return 0;
     }
+    if (timeout <= 0) return 0;
 
     return 1;
 }

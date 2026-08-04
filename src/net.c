@@ -130,13 +130,13 @@ void net_send_ping(uint32_t dest_ip) {
     ip->id = __builtin_bswap16(0x4321);
     ip->flags_fragment = 0;
     ip->ttl = 64;
-    ip->protocol = 1; // ICMP
+    ip->protocol = 1;
     ip->src_ip = my_ip;
     ip->dest_ip = dest_ip;
     ip->checksum = 0;
     ip->checksum = ip_checksum(ip, sizeof(ipv4_header_t));
 
-    icmp->type = 8; // Echo Request
+    icmp->type = 8;
     icmp->code = 0;
     icmp->id = __builtin_bswap16(0x1337);
     icmp->sequence = __builtin_bswap16(1);
@@ -151,9 +151,9 @@ void net_send_dns_query(const char* domain) {
     uint8_t dns_req[512];
     fast_memset(dns_req, 0, sizeof(dns_req));
 
-    dns_req[0] = 0x12; dns_req[1] = 0x34; // Transaction ID
-    dns_req[2] = 0x01; dns_req[3] = 0x00; // Standard Query
-    dns_req[4] = 0x00; dns_req[5] = 0x01; // Questions = 1
+    dns_req[0] = 0x12; dns_req[1] = 0x34;
+    dns_req[2] = 0x01; dns_req[3] = 0x00;
+    dns_req[4] = 0x00; dns_req[5] = 0x01;
 
     uint8_t* qname = &dns_req[12];
     int q_idx = 0;
@@ -169,10 +169,10 @@ void net_send_dns_query(const char* domain) {
         }
         i = j;
     }
-    qname[q_idx++] = 0; // Null terminator of labels
+    qname[q_idx++] = 0;
 
-    qname[q_idx++] = 0x00; qname[q_idx++] = 0x01; // Type A
-    qname[q_idx++] = 0x00; qname[q_idx++] = 0x01; // Class IN
+    qname[q_idx++] = 0x00; qname[q_idx++] = 0x01;
+    qname[q_idx++] = 0x00; qname[q_idx++] = 0x01;
 
     net_send_udp(dns_server, 5353, 53, dns_req, 12 + q_idx);
     serial_write("[NET DNS] Consulta DNS enviada para 10.0.2.3!\n");
@@ -192,7 +192,7 @@ void net_init(void) {
     if (!io_base) io_base = 0xC000;
 
     outb(io_base + 0x52, 0x00);
-    outb(io_base + 0x37, 0x10); // Software reset
+    outb(io_base + 0x37, 0x10);
     while ((inb(io_base + 0x37) & 0x10) != 0);
 
     for (int i = 0; i < 6; i++) mac_addr[i] = inb(io_base + i);
@@ -202,7 +202,7 @@ void net_init(void) {
 
     outw(io_base + 0x3C, 0x0005);
     outl(io_base + 0x44, 0x0F);
-    outb(io_base + 0x37, 0x0C); // Enable Receiver and Transmitter
+    outb(io_base + 0x37, 0x0C);
 
     serial_write("[NET] RTL8139 Inicializada com Suporte a SLIRP (IP: 10.0.2.15)!\n");
 }
@@ -210,7 +210,7 @@ void net_init(void) {
 void net_poll(void) {
     if (!io_base || !rx_buffer) return;
 
-    if ((inb(io_base + 0x37) & 0x01) == 0) { // Buffer não vazio (BUFE == 0)
+    if ((inb(io_base + 0x37) & 0x01) == 0) {
         uint8_t* pkt = rx_buffer + rx_offset;
         uint16_t rx_status = *(uint16_t*)(pkt);
         uint16_t pkt_len = *(uint16_t*)(pkt + 2);
@@ -246,7 +246,7 @@ void net_poll(void) {
                 ipv4_header_t* ip = (ipv4_header_t*)(pkt + 4 + sizeof(ethernet_header_t));
                 if (ip->protocol == 1 && ip->dest_ip == my_ip) {
                     icmp_header_t* icmp = (icmp_header_t*)(pkt + 4 + sizeof(ethernet_header_t) + sizeof(ipv4_header_t));
-                    if (icmp->type == 8) { // Echo Request
+                    if (icmp->type == 8) {
                         uint8_t reply[128];
                         fast_memcpy(reply, pkt + 4, 98);
 
@@ -272,7 +272,6 @@ void net_poll(void) {
             }
         }
 
-        // Avança o ponteiro do Ring Buffer RTL8139 com alinhamento real de DWORD
         rx_offset = (rx_offset + pkt_len + 4 + 3) & ~3;
         rx_offset %= 8192;
         outw(io_base + 0x38, (uint16_t)(rx_offset - 0x10));
