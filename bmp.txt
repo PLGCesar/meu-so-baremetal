@@ -12,3 +12,4 @@ video.bmp
 calc.bmp
 logs.bmp
 pad.bmp
+serial.bmp

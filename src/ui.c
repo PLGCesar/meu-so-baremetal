@@ -15,7 +15,7 @@
 #include "../include/bgif.h"
 #include "../include/ahci.h"
 
-#define MAX_WINDOWS 13
+#define MAX_WINDOWS 14
 
 typedef struct {
     int id; 
@@ -35,7 +35,7 @@ static int bgif_wallpaper_frame = 0;
 static int start_menu_open = 0, gallery_photo = 0;
 
 static char input_buffer[32]; static int input_index = 0;
-static char shell_output[128] = "CAPIVARAOS INTERNET & DISCO SATA PRONTOS!";
+static char shell_output[128] = "CAPIVARAOS INTERNET, DISCO SATA E SERIAL PRONTOS!";
 static uint32_t paint_canvas[160 * 120]; static uint32_t paint_color = 0xFFFFFF;
 static int prev_mouse_left = 0;
 static int prev_mouse_x = -1, prev_mouse_y = -1;
@@ -57,16 +57,19 @@ static int calc_clear_next = 0;
 static char pad_buffer[256] = "BEM-VINDO AO CAPIVARAPAD! DIGITE SEU TEXTO AQUI...";
 static int pad_index = 50;
 
-static char app_icon_files[13][32] = {
+static char serial_guest_input[64] = "";
+static int serial_guest_idx = 0;
+
+static char app_icon_files[14][32] = {
     "shell.bmp", "ram.bmp", "net.bmp", "gallery.bmp", "music.bmp",
     "tasks.bmp", "paint.bmp", "vfs.bmp", "snake.bmp", "video.bmp",
-    "calc.bmp", "logs.bmp", "pad.bmp"
+    "calc.bmp", "logs.bmp", "pad.bmp", "serial.bmp"
 };
 
-static const char* app_names[13] = {
+static const char* app_names[14] = {
     "1. SHELL", "2. RAM", "3. REDE", "4. GALERIA", "5. MUSICA",
     "6. TAREFAS", "7. PAINT", "8. EXPLORAR", "9. SNAKE", "10. VIDEO",
-    "11. CALC", "12. LOGS", "13. NOTAS"
+    "11. CALC", "12. LOGS", "13. NOTAS", "14. SERIAL"
 };
 
 static int selected_icon_target_app = 0;
@@ -76,7 +79,7 @@ static void load_icons_config(void) {
     const uint8_t* cfg = vfs_read("icons.cfg", &sz);
     if (cfg && sz > 0) {
         size_t idx = 0;
-        for (int app = 0; app < 13 && idx < sz; app++) {
+        for (int app = 0; app < 14 && idx < sz; app++) {
             int pos = 0;
             while (idx < sz && cfg[idx] != '\n' && cfg[idx] != '\r' && pos < 31) {
                 app_icon_files[app][pos++] = cfg[idx++];
@@ -90,7 +93,7 @@ static void load_icons_config(void) {
 static void save_icons_config(void) {
     char cfg_buf[512];
     cfg_buf[0] = '\0';
-    for (int i = 0; i < 13; i++) {
+    for (int i = 0; i < 14; i++) {
         kstrcpy(cfg_buf + kstrlen(cfg_buf), app_icon_files[i]);
         kstrcpy(cfg_buf + kstrlen(cfg_buf), "\n");
     }
@@ -164,6 +167,7 @@ void ui_init(void) {
     windows[10]= (window_t){10, 10, 300, 150, 200, 260, 0, 11, NULL};
     windows[11]= (window_t){11, 11, 220, 100, 600, 480, 0, 12, NULL};
     windows[12]= (window_t){12, 12, 180, 70,  620, 480, 0, 13, NULL};
+    windows[13]= (window_t){13, 13, 200, 90,  620, 500, 0, 14, NULL};
 
     for (int i = 0; i < MAX_WINDOWS; i++) {
         window_t* w = &windows[i];
@@ -185,12 +189,13 @@ void ui_init(void) {
         else if (w->app_type == 10) title = "JANELA: CALCULADORA";
         else if (w->app_type == 11) title = "JANELA: LOGS & UPDATES";
         else if (w->app_type == 12) title = "JANELA: CAPIVARAPAD";
+        else if (w->app_type == 13) title = "JANELA: SERIAL HOST LINK (BIDIRECIONAL)";
         gfx_draw_string(title, 15, 11, COLOR_WHITE);
         gfx_draw_rect(w->w - 25, 7, 16, 16, COLOR_RED);
     }
     
     gfx_set_target(NULL, 0, 0);
-    top_z_index = 13;
+    top_z_index = 14;
     ui_needs_redraw = 1;
 }
 
@@ -252,6 +257,22 @@ void ui_handle_keyboard(void) {
             if (windows[i].is_open && windows[i].z_index > highest_z) {
                 highest_z = windows[i].z_index; top_win = i;
             }
+        }
+
+        if (top_win != -1 && windows[top_win].app_type == 13) {
+            if (c == '\b') {
+                if (serial_guest_idx > 0) serial_guest_input[--serial_guest_idx] = '\0';
+            } else if (c == '\n') {
+                if (serial_guest_idx > 0) {
+                    serial_send_custom(serial_guest_input);
+                    serial_guest_input[0] = '\0';
+                    serial_guest_idx = 0;
+                }
+            } else if (serial_guest_idx < 60) {
+                serial_guest_input[serial_guest_idx++] = c;
+                serial_guest_input[serial_guest_idx] = '\0';
+            }
+            return;
         }
 
         if (top_win != -1 && windows[top_win].app_type == 12) {
@@ -322,6 +343,7 @@ void ui_handle_mouse(void) {
         if (mouse_y >= 20 && mouse_y <= 75) bring_to_front(10);
         else if (mouse_y >= 80 && mouse_y <= 135) bring_to_front(11);
         else if (mouse_y >= 140 && mouse_y <= 195) bring_to_front(12);
+        else if (mouse_y >= 200 && mouse_y <= 255) bring_to_front(13);
     }
 
     if (just_pressed && mouse_x >= 10 && mouse_x <= 90 && mouse_y >= screen_h - 35 && mouse_y <= screen_h - 5) {
@@ -329,10 +351,10 @@ void ui_handle_mouse(void) {
     }
 
     if (start_menu_open && just_pressed && mouse_x >= 10 && mouse_x <= 200 && mouse_y >= screen_h - 480 && mouse_y <= screen_h - 70) {
-        for (int i = 0; i < 12; i++) {
-            int my = screen_h - 445 + (i * 30);
-            if (mouse_y >= my - 5 && mouse_y <= my + 25) {
-                int mapping[] = {0, 1, 2, 3, 4, 5, 6, 7, 9, 10, 11, 12};
+        for (int i = 0; i < 13; i++) {
+            int my = screen_h - 445 + (i * 28);
+            if (mouse_y >= my - 5 && mouse_y <= my + 23) {
+                int mapping[] = {0, 1, 2, 3, 4, 5, 6, 7, 9, 10, 11, 12, 13};
                 bring_to_front(mapping[i]);
             }
         }
@@ -354,6 +376,16 @@ void ui_handle_mouse(void) {
 
             if (mouse_y >= w->y && mouse_y <= (w->y + 30)) {
                 dragging_window_id = clicked_win; drag_off_x = mouse_x - w->x; drag_off_y = mouse_y - w->y;
+            }
+
+            if (w->app_type == 13 && mouse_y >= w->y + 420 && mouse_y <= w->y + 455) {
+                if (mouse_x >= w->x + 30 && mouse_x <= w->x + 240 && serial_guest_idx > 0) {
+                    serial_send_custom(serial_guest_input);
+                    serial_guest_input[0] = '\0';
+                    serial_guest_idx = 0;
+                    sound_click();
+                }
+                ui_needs_redraw = 1;
             }
 
             if (w->app_type == 12 && mouse_y >= w->y + 420 && mouse_y <= w->y + 455) {
@@ -454,7 +486,7 @@ void ui_handle_mouse(void) {
 
                 if (mouse_y >= btn_y3 && mouse_y <= btn_y3 + 30) {
                     if (mouse_x >= w->x + 20 && mouse_x <= w->x + 250) {
-                        selected_icon_target_app = (selected_icon_target_app + 1) % 13;
+                        selected_icon_target_app = (selected_icon_target_app + 1) % 14;
                     } else if (mouse_x >= w->x + 260 && mouse_x <= w->x + 500) {
                         const char* pic_names[] = {"foto.bmp", "gallery.bmp", "paint.bmp", "foto.bmp"};
                         kstrcpy(app_icon_files[selected_icon_target_app], pic_names[gallery_photo]);
@@ -703,6 +735,21 @@ void draw_single_window(window_t* w) {
 
         gfx_draw_rect(win_x + 240, btn_pad_y, 160, 35, COLOR_GRAY);
         gfx_draw_string("NOVO / LIMPAR", win_x + 260, btn_pad_y + 12, COLOR_WHITE);
+    } else if (w->app_type == 13) {
+        gfx_draw_string("TERMINAL SERIAL HOST (BIDIRECIONAL COM1):", win_x + 20, win_y + 45, COLOR_GREEN);
+        gfx_draw_rect(win_x + 20, win_y + 70, win_w - 40, 290, COLOR_NAVY);
+
+        gfx_draw_string(serial_get_log(), win_x + 30, win_y + 80, COLOR_WHITE);
+
+        gfx_draw_string("MENSAGEM DO GUEST PARA O HOST:", win_x + 20, win_y + 375, COLOR_YELLOW);
+        gfx_draw_rect(win_x + 20, win_y + 390, win_w - 40, 25, COLOR_NAVY);
+        gfx_draw_string(serial_guest_input, win_x + 25, win_y + 398, COLOR_WHITE);
+
+        int btn_s_y = win_y + 425;
+        gfx_draw_rect(win_x + 20, btn_s_y, 220, 35, COLOR_GREEN);
+        gfx_draw_string("ENVIAR VIA SERIAL", win_x + 40, btn_s_y + 12, COLOR_NAVY);
+
+        gfx_draw_string("HOST COMANDO: cat <nome_arquivo>", win_x + 260, btn_s_y + 12, COLOR_YELLOW);
     }
 }
 
@@ -787,6 +834,7 @@ void ui_render(void) {
     draw_desktop_icon(ic_x2, 20,  10, "10. CALC", "CALCULADORA", COLOR_ORANGE);
     draw_desktop_icon(ic_x2, 80,  11, "11. LOGS", "CHANGELOG",   COLOR_GREEN);
     draw_desktop_icon(ic_x2, 140, 12, "12. NOTAS", "CAPIVARAPAD",COLOR_YELLOW);
+    draw_desktop_icon(ic_x2, 200, 13, "14. SERIAL", "HOST LINK", COLOR_GREEN);
 
     gfx_draw_rect_alpha(0, screen_h - 40, screen_w, 40, COLOR_NAVY, 215);
     gfx_draw_rect(10, screen_h - 35, 80, 30, start_menu_open ? COLOR_GREEN : COLOR_BLUE);
@@ -819,10 +867,11 @@ void ui_render(void) {
             "> 9. PLAYER BGIF",
             "> 10. CALCULADORA",
             "> 11. LOGS / UPDATES",
-            "> 12. CAPIVARAPAD"
+            "> 12. CAPIVARAPAD",
+            "> 14. SERIAL HOST LINK"
         };
-        for (int i = 0; i < 12; i++) {
-            gfx_draw_string(menu_items[i], 20, screen_h - 445 + (i * 30), COLOR_WHITE);
+        for (int i = 0; i < 13; i++) {
+            gfx_draw_string(menu_items[i], 20, screen_h - 445 + (i * 28), COLOR_WHITE);
         }
 
         int btn_power_y = screen_h - 40;

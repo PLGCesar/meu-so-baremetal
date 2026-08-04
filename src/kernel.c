@@ -21,7 +21,7 @@ void task_music_loop(void) {
 
 void kernel_main(multiboot_info_t* mbi) {
     serial_init();
-    serial_write("[LOG SERIAL] KERNEL CAPIVARAOS 64-BIT ADVANCED (MLFQ + VMM + SSE2 PURO)\n");
+    serial_write("[LOG SERIAL] KERNEL CAPIVARAOS 64-BIT ADVANCED (SERIAL BIDIRECIONAL ATIVO)\n");
 
     memory_init(mbi);
     vmm_init();
@@ -38,6 +38,7 @@ void kernel_main(multiboot_info_t* mbi) {
     sound_startup();
 
     while (1) {
+        serial_poll();
         ui_handle_mouse();
         ui_handle_keyboard();
         net_poll();
