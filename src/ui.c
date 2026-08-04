@@ -535,8 +535,10 @@ void ui_handle_mouse(void) {
     if (click && dragging_window_id != -1) {
         window_t* w = &windows[dragging_window_id];
         w->x = mouse_x - drag_off_x; w->y = mouse_y - drag_off_y;
-        if (w->x < 0) w->x = 0; if (w->x + w->w > 1024) w->x = 1024 - w->w;
-        if (w->y < 0) w->y = 0; if (w->y + w->h > 728) w->y = 728 - w->h;
+        if (w->x < 0) w->x = 0;
+        if (w->x + w->w > 1024) w->x = 1024 - w->w;
+        if (w->y < 0) w->y = 0;
+        if (w->y + w->h > 728) w->y = 728 - w->h;
         ui_needs_redraw = 1;
     }
 

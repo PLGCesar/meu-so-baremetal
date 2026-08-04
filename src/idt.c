@@ -39,11 +39,19 @@ static const char scancode_ascii_shift[128] = { 0, 27, '!', '@', '#', '$', '%', 
 
 static char apply_accent(char dead, char base) {
     if (dead == '\'') {
-        if (base == 'a') return (char)225; if (base == 'e') return (char)233; if (base == 'i') return (char)237; if (base == 'o') return (char)243; if (base == 'u') return (char)250; if (base == 'c') return (char)231;
+        if (base == 'a') return (char)225;
+        if (base == 'e') return (char)233;
+        if (base == 'i') return (char)237;
+        if (base == 'o') return (char)243;
+        if (base == 'u') return (char)250;
+        if (base == 'c') return (char)231;
     } else if (dead == '~') {
-        if (base == 'a') return (char)227; if (base == 'o') return (char)245;
+        if (base == 'a') return (char)227;
+        if (base == 'o') return (char)245;
     } else if (dead == '^') {
-        if (base == 'a') return (char)226; if (base == 'e') return (char)234; if (base == 'o') return (char)244;
+        if (base == 'a') return (char)226;
+        if (base == 'e') return (char)234;
+        if (base == 'o') return (char)244;
     } else if (dead == '`') {
         if (base == 'a') return (char)224;
     }
@@ -51,33 +59,48 @@ static char apply_accent(char dead, char base) {
 }
 
 void idt_set_gate(uint8_t num, uint64_t base, uint16_t sel, uint8_t flags) {
-    idt[num].base_low = base & 0xFFFF; idt[num].base_mid = (base >> 16) & 0xFFFF;
+    idt[num].base_low = base & 0xFFFF;
+    idt[num].base_mid = (base >> 16) & 0xFFFF;
     idt[num].base_high = (base >> 32) & 0xFFFFFFFF;
-    idt[num].sel = sel; idt[num].ist = 0; idt[num].flags = flags; idt[num].reserved = 0;
+    idt[num].sel = sel;
+    idt[num].ist = 0;
+    idt[num].flags = flags;
+    idt[num].reserved = 0;
 }
 
 void exception0_handler(void) {
     serial_write("[PANIC] DIVISAO POR ZERO\n");
-    gfx_clear(0x880000); gfx_draw_string("KERNEL PANIC: EXCECAO 00 (DIVISAO POR ZERO)", 120, 162, 0xFFFFFF); gfx_swap_buffers();
+    gfx_clear(0x880000);
+    gfx_draw_string("KERNEL PANIC: EXCECAO 00 (DIVISAO POR ZERO)", 120, 162, 0xFFFFFF);
+    gfx_swap_buffers();
     while (1) asm volatile ("cli; hlt");
 }
 
-void exception8_handler(uint64_t error_code) { (void)error_code;
+void exception8_handler(uint64_t error_code) {
+    (void)error_code;
     serial_write("[PANIC] DOUBLE FAULT TRATADO (TRIPLE FAULT EVITADO)\n");
-    gfx_clear(0x880000); gfx_draw_string("KERNEL PANIC: EXCECAO 08 (DOUBLE FAULT) EVITADO", 120, 162, 0xFFFFFF); gfx_swap_buffers();
+    gfx_clear(0x880000);
+    gfx_draw_string("KERNEL PANIC: EXCECAO 08 (DOUBLE FAULT) EVITADO", 120, 162, 0xFFFFFF);
+    gfx_swap_buffers();
     while (1) asm volatile ("cli; hlt");
 }
 
-void exception13_handler(uint64_t error_code) { (void)error_code;
+void exception13_handler(uint64_t error_code) {
+    (void)error_code;
     serial_write("[PANIC] GENERAL PROTECTION FAULT (GPF)\n");
-    gfx_clear(0x880000); gfx_draw_string("KERNEL PANIC: EXCECAO 13 (GPF) MEMORIA PROTEGIDA", 120, 162, 0xFFFFFF); gfx_swap_buffers();
+    gfx_clear(0x880000);
+    gfx_draw_string("KERNEL PANIC: EXCECAO 13 (GPF) MEMORIA PROTEGIDA", 120, 162, 0xFFFFFF);
+    gfx_swap_buffers();
     while (1) asm volatile ("cli; hlt");
 }
 
-void exception14_handler(uint64_t error_code) { (void)error_code;
+void exception14_handler(uint64_t error_code) {
+    (void)error_code;
     uint64_t cr2; asm volatile("mov %%cr2, %0" : "=r"(cr2));
     serial_write("[PANIC] PAGE FAULT EM RING 0/3\n");
-    gfx_clear(0x880000); gfx_draw_string("KERNEL PANIC: EXCECAO 14 (PAGE FAULT) VMM SHIELD", 120, 162, 0xFFFFFF); gfx_swap_buffers();
+    gfx_clear(0x880000);
+    gfx_draw_string("KERNEL PANIC: EXCECAO 14 (PAGE FAULT) VMM SHIELD", 120, 162, 0xFFFFFF);
+    gfx_swap_buffers();
     while (1) asm volatile ("cli; hlt");
 }
 
@@ -151,9 +174,12 @@ void mouse_handler_main(void) {
             case 1: mouse_byte[1] = data; mouse_cycle++; break;
             case 2: mouse_byte[2] = data; mouse_cycle = 0;
                 mouse_left_clicked = (mouse_byte[0] & 0x01);
-                mouse_x += (int8_t)mouse_byte[1]; mouse_y -= (int8_t)mouse_byte[2];
-                if (mouse_x < 0) mouse_x = 0; if (mouse_x >= 1024) mouse_x = 1023;
-                if (mouse_y < 0) mouse_y = 0; if (mouse_y >= 768) mouse_y = 767;
+                mouse_x += (int8_t)mouse_byte[1];
+                mouse_y -= (int8_t)mouse_byte[2];
+                if (mouse_x < 0) mouse_x = 0;
+                if (mouse_x >= 1024) mouse_x = 1023;
+                if (mouse_y < 0) mouse_y = 0;
+                if (mouse_y >= 768) mouse_y = 767;
                 break;
         }
     }
