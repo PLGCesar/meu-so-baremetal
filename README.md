@@ -77,7 +77,7 @@ qemu-system-x86_64 \
   -netdev user,id=net0 \
   -device rtl8139,netdev=net0 \
   -audiodev pa,id=audio0 \
-  -machine pcspk-audiodev=audio0
+  -machine pcspk-audiodev=audio0```
 
 # ESTRUTURA DE ARQUIVOS
 ├── boot.s               # Ponto de entrada Assembly 32->64b, GDT, Paging e IDT Stubs
