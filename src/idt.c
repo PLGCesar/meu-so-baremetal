@@ -16,6 +16,7 @@ struct idt_entry idt[256];
 struct idt_ptr idtp;
 
 extern void load_idt(struct idt_ptr*);
+extern void default_irq_stub(void);
 extern void isr0_stub(void);
 extern void isr8_stub(void);
 extern void isr13_stub(void);
@@ -89,7 +90,7 @@ void pic_remap(void) {
 void idt_init(void) {
     idtp.limit = (sizeof(struct idt_entry) * 256) - 1;
     idtp.base = (uint64_t)&idt;
-    for (int i = 0; i < 256; i++) idt_set_gate(i, 0, 0, 0);
+    for (int i = 0; i < 256; i++) idt_set_gate(i, (uint64_t)default_irq_stub, 0x08, 0x8E);
     pic_remap();
     
     idt_set_gate(0,  (uint64_t)isr0_stub,  0x08, 0x8E);
@@ -102,7 +103,6 @@ void idt_init(void) {
     idt_set_gate(44, (uint64_t)irq12_stub, 0x08, 0x8E);
 
     load_idt(&idtp);
-    timer_init();
     
     outb(0x64, 0xA8); outb(0x64, 0x20);
     uint8_t st = inb(0x60) | 2;

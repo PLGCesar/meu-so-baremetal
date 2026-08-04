@@ -49,7 +49,7 @@ int is_transmit_empty(void) {
 
 int serial_has_data(void) {
     uint8_t status = inb(PORT + 5);
-    if (status == 0xFF) return 0; // Proteção se a porta não existir / flutuante
+    if (status == 0xFF) return 0; // Proteção para porta desconectada/ausente
     return (status & 0x01);
 }
 
@@ -137,7 +137,7 @@ static void process_serial_host_cmd(const char* cmd) {
 }
 
 void serial_poll(void) {
-    int max_bytes = 64; // Limite de bytes por frame para NÃO travar o rendering de vídeo
+    int max_bytes = 64; // Não bloqueia rendering da interface gráfica
     while (serial_has_data() && max_bytes-- > 0) {
         uint8_t b = inb(PORT);
         if (b == 0xFF) break;
@@ -149,7 +149,7 @@ void serial_poll(void) {
                 process_serial_host_cmd(rx_line);
                 rx_idx = 0;
             }
-        } else if (c >= 32 && c <= 126) { // Apenas caracteres ASCII visíveis
+        } else if (c >= 32 && c <= 126) {
             if (rx_idx < sizeof(rx_line) - 1) {
                 rx_line[rx_idx++] = c;
             }

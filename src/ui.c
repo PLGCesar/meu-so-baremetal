@@ -739,7 +739,6 @@ void draw_single_window(window_t* w) {
         gfx_draw_string("TERMINAL SERIAL HOST (BIDIRECIONAL COM1):", win_x + 20, win_y + 45, COLOR_GREEN);
         gfx_draw_rect(win_x + 20, win_y + 70, win_w - 40, 290, COLOR_NAVY);
 
-        // Renderização segura com quebra de linha tratada
         const char* log = serial_get_log();
         int cur_x = win_x + 30;
         int cur_y = win_y + 80;
