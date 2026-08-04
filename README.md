@@ -79,6 +79,7 @@ qemu-system-x86_64 \
   -audiodev pa,id=audio0 \
   -machine pcspk-audiodev=audio0```
 
+```
 # ESTRUTURA DE ARQUIVOS
 ├── boot.s               # Ponto de entrada Assembly 32->64b, GDT, Paging e IDT Stubs
 ├── Dockerfile           # Ambiente isolado de build com GCC x86_64 & GRUB
