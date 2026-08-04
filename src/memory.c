@@ -218,3 +218,52 @@ void kfree(void* ptr) {
 size_t memory_get_total_allocated(void) { return total_allocated; }
 size_t memory_get_total_free(void) { return total_free; }
 size_t memory_get_block_count(void) { return block_count; }
+
+// --- PAGINAÇÃO AVANÇADA DE 4 NÍVEIS (PML4) E PROTEÇÃO DE MEMÓRIA (VMM) ---
+#define PAGE_PRESENT  0x01
+#define PAGE_WRITABLE 0x02
+#define PAGE_USER     0x04
+
+static uint64_t* kernel_pml4 = NULL;
+
+void vmm_init(void) {
+    uint64_t cr3;
+    asm volatile("mov %%cr3, %0" : "=r"(cr3));
+    kernel_pml4 = (uint64_t*)(cr3 & 0xFFFFFFFFFFFFF000ULL);
+    serial_write("[VMM] Sistema de Paginação 4-Níveis Inicializado p/ Proteção!\n");
+}
+
+void vmm_map_page(uint64_t vaddr, uint64_t paddr, uint32_t flags) {
+    if (!kernel_pml4) return;
+    
+    uint64_t pml4_idx = (vaddr >> 39) & 0x1FF;
+    uint64_t pdp_idx  = (vaddr >> 30) & 0x1FF;
+    uint64_t pd_idx   = (vaddr >> 21) & 0x1FF;
+    uint64_t pt_idx   = (vaddr >> 12) & 0x1FF;
+
+    if (!(kernel_pml4[pml4_idx] & PAGE_PRESENT)) {
+        uint64_t* new_pdp = (uint64_t*)kcalloc(512, sizeof(uint64_t));
+        kernel_pml4[pml4_idx] = (uint64_t)new_pdp | PAGE_PRESENT | PAGE_WRITABLE | PAGE_USER;
+    }
+
+    uint64_t* pdp = (uint64_t*)(kernel_pml4[pml4_idx] & 0xFFFFFFFFFFFFF000ULL);
+    if (!(pdp[pdp_idx] & PAGE_PRESENT)) {
+        uint64_t* new_pd = (uint64_t*)kcalloc(512, sizeof(uint64_t));
+        pdp[pdp_idx] = (uint64_t)new_pd | PAGE_PRESENT | PAGE_WRITABLE | PAGE_USER;
+    }
+
+    uint64_t* pd = (uint64_t*)(pdp[pdp_idx] & 0xFFFFFFFFFFFFF000ULL);
+    if (!(pd[pd_idx] & PAGE_PRESENT)) {
+        uint64_t* new_pt = (uint64_t*)kcalloc(512, sizeof(uint64_t));
+        pd[pd_idx] = (uint64_t)new_pt | PAGE_PRESENT | PAGE_WRITABLE | PAGE_USER;
+    }
+
+    uint64_t* pt = (uint64_t*)(pd[pd_idx] & 0xFFFFFFFFFFFFF000ULL);
+    pt[pt_idx] = (paddr & 0xFFFFFFFFFFFFF000ULL) | flags;
+    
+    asm volatile("invlpg (%0)" ::"r" (vaddr) : "memory");
+}
+
+void vmm_protect_page(uint64_t vaddr, uint32_t flags) {
+    vmm_map_page(vaddr, vaddr, flags); // Altera permissões dinâmicas
+}

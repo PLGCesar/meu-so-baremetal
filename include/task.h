@@ -4,7 +4,7 @@
 #include <stdint.h>
 #include <stddef.h>
 
-#define MAX_TASKS 8
+#define MAX_TASKS 32 // Expansão para suportar arquitetura multitarefa mais fluída
 
 typedef enum {
     TASK_STATE_READY,
@@ -17,9 +17,9 @@ typedef struct task {
     int pid;
     char name[32];
     uint64_t rsp;
-    uint64_t stack[1024];
+    uint64_t stack[2048]; // Stack ampliada p/ evitar stack overflow (Proteção)
     task_state_t state;
-    int priority;
+    int priority;         // 1 (Baixa) a 5 (Alta - RT)
     uint64_t time_ticks;
     uint32_t ticks_remaining;
     uint64_t wake_ticks;
@@ -31,7 +31,8 @@ void timer_init(void);
 int task_create(void (*entry)(void), const char* name, int priority);
 int task_create_user(void (*entry)(void), const char* name, int priority);
 void task_sleep(uint64_t ticks);
-uint64_t schedule(uint64_t current_rsp);
+void task_yield(void); // API de E/S Assíncrona e Preempção Cooperativa
+uint64_t schedule(uint64_t current_rsp) __attribute__((hot));
 
 uint64_t get_system_ticks(void);
 int get_num_tasks(void);

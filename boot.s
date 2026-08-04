@@ -21,12 +21,12 @@ stack_top:
 .section .rodata
 .align 8
 gdt64:
-    .quad 0                  /* 0x00: Null */
-    .quad 0x00209A0000000000 /* 0x08: Kernel Code 64-bit */
-    .quad 0x0000920000000000 /* 0x10: Kernel Data 64-bit */
-    .quad 0x00CFFA000000FFFF /* 0x18: User Code 32-bit */
-    .quad 0x0000F20000000000 /* 0x20: User Data 64-bit (Ring 3) */
-    .quad 0x0020FA0000000000 /* 0x28: User Code 64-bit (Ring 3) */
+    .quad 0
+    .quad 0x00209A0000000000
+    .quad 0x0000920000000000
+    .quad 0x00CFFA000000FFFF
+    .quad 0x0000F20000000000
+    .quad 0x0020FA0000000000
 gdt64_pointer:
     .word gdt64_pointer - gdt64 - 1
     .quad gdt64
@@ -57,7 +57,7 @@ _start:
 map_pd:
     mov $0x200000, %eax
     mul %ecx
-    or $0x187, %eax           /* Global | HugePage | User | Writable | Present */
+    or $0x187, %eax
     mov %eax, pd_table(,%ecx,8)
     inc %ecx
     cmp $2048, %ecx
@@ -66,7 +66,6 @@ map_pd:
     mov $pml4_table, %eax
     mov %eax, %cr3
 
-    /* ATIVA PAE (bit 5), PGE (bit 7) E SSE (bits 9 e 10) NO CR4 */
     mov %cr4, %eax
     or $(1<<5), %eax
     or $(1<<7), %eax
@@ -110,7 +109,6 @@ long_mode_start:
     mov $7, %eax
     xor %edx, %edx
     xsetbv
-
 skip_avx:
     call kernel_main
     cli
@@ -135,19 +133,14 @@ syscall_entry:
     push %r10
     push %rbx
     push %rbp
-
-    /* Impede o clobbering dos registradores da ABI AMD64 Syscall */
     mov %rdx, %rcx
     mov %rsi, %rdx
     mov %rdi, %rsi
     mov %rax, %rdi
-    
-    /* Alinha a pilha para evitar Triple Fault no SSE do Kernel */
     mov %rsp, %rbp
     and $-16, %rsp
     call sys_handler
     mov %rbp, %rsp
-
     pop %rbp
     pop %rbx
     pop %r10
@@ -180,6 +173,46 @@ isr0_stub:
     call exception0_handler
     mov %rbp, %rsp
     POP_ALL
+    iretq
+
+/* EXCEÇÕES DE PROTEÇÃO COM TRATAMENTO DE ERROR CODE (PREVENÇÃO DE TRIPLE FAULT) */
+.global isr8_stub
+.extern exception8_handler
+isr8_stub:
+    PUSH_ALL
+    mov 120(%rsp), %rdi /* Error Code injetado pela CPU na Stack */
+    mov %rsp, %rbp
+    and $-16, %rsp
+    call exception8_handler
+    mov %rbp, %rsp
+    POP_ALL
+    add $8, %rsp
+    iretq
+
+.global isr13_stub
+.extern exception13_handler
+isr13_stub:
+    PUSH_ALL
+    mov 120(%rsp), %rdi
+    mov %rsp, %rbp
+    and $-16, %rsp
+    call exception13_handler
+    mov %rbp, %rsp
+    POP_ALL
+    add $8, %rsp
+    iretq
+
+.global isr14_stub
+.extern exception14_handler
+isr14_stub:
+    PUSH_ALL
+    mov 120(%rsp), %rdi
+    mov %rsp, %rbp
+    and $-16, %rsp
+    call exception14_handler
+    mov %rbp, %rsp
+    POP_ALL
+    add $8, %rsp
     iretq
 
 .global irq0_stub
@@ -220,7 +253,6 @@ irq12_stub:
 .global foto_bmp_start; .global foto_bmp_end
 .global bgif_anim_start; .global bgif_anim_end
 .global app_elf_start; .global app_elf_end
-
 disk_start: .incbin "disk.img"; disk_end:
 foto_bmp_start: .incbin "foto.bmp"; foto_bmp_end:
 bgif_anim_start: .incbin "animacao.bgif"; bgif_anim_end:

@@ -14,34 +14,35 @@
 void task_music_loop(void) {
     while (1) {
         music_update();
-        asm volatile ("hlt");
+        task_yield(); // Otimização para E/S e Multitarefas
     }
 }
 
 void kernel_main(multiboot_info_t* mbi) {
     serial_init();
-    serial_write("[LOG SERIAL] INICIALIZANDO KERNEL CAPIVARAOS 64-BIT v1.0 (BOSS 6 & APP 10)\n");
+    serial_write("[LOG SERIAL] KERNEL CAPIVARAOS 64-BIT ADVANCED (MLFQ + VMM) \n");
 
     memory_init(mbi);
+    vmm_init(); // Ativa Proteção de Paginação PML4
+    
     gfx_init(mbi);
     idt_init();
     vfs_init();
     ui_init();
 
-    // INICIALIZA AS INSTRUÇÕES MSR DE SYSCALL/SYSRET DA CPU DE 64-BITS
     syscall_init();
 
     task_init();
-    task_create(task_music_loop, "Chiptune_Synthesizer", 2);
+    task_create(task_music_loop, "Chiptune_Synthesizer", 3); // Prioridade 3
 
     sound_startup();
-    serial_write("[LOG SERIAL] Syscalls e Explorador #| Ativos no Kernel 64-bit!\n");
+    serial_write("[LOG SERIAL] Excecoes da IDT Protegidas contra Triple-Fault!\n");
 
     while (1) {
         ui_handle_mouse();
         ui_handle_keyboard();
         net_poll();
         ui_render();
-        asm volatile ("hlt");
+        task_yield(); // Cedendo ciclos ociosos para o Escalonador Assíncrono (-O3 Friendly)
     }
 }

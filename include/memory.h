@@ -33,3 +33,8 @@ size_t memory_get_total_free(void);
 size_t memory_get_block_count(void);
 
 #endif
+
+// --- PAGINAÇÃO AVANÇADA E PROTEÇÃO DE MEMÓRIA ---
+void vmm_init(void);
+void vmm_map_page(uint64_t vaddr, uint64_t paddr, uint32_t flags);
+void vmm_protect_page(uint64_t vaddr, uint32_t flags);
