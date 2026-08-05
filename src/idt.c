@@ -69,38 +69,25 @@ void idt_set_gate(uint8_t num, uint64_t base, uint16_t sel, uint8_t flags) {
 }
 
 void exception0_handler(void) {
-    serial_write("[PANIC] DIVISAO POR ZERO\n");
-    gfx_clear(0x880000);
-    gfx_draw_string("KERNEL PANIC: EXCECAO 00 (DIVISAO POR ZERO)", 120, 162, 0xFFFFFF);
-    gfx_swap_buffers();
+    serial_write("\n[PANIC CRITICO] EXCECAO 00: DIVISAO POR ZERO\n");
     while (1) asm volatile ("cli; hlt");
 }
 
 void exception8_handler(uint64_t error_code) {
     (void)error_code;
-    serial_write("[PANIC] DOUBLE FAULT TRATADO (TRIPLE FAULT EVITADO)\n");
-    gfx_clear(0x880000);
-    gfx_draw_string("KERNEL PANIC: EXCECAO 08 (DOUBLE FAULT) EVITADO", 120, 162, 0xFFFFFF);
-    gfx_swap_buffers();
+    serial_write("\n[PANIC CRITICO] EXCECAO 08: DOUBLE FAULT\n");
     while (1) asm volatile ("cli; hlt");
 }
 
 void exception13_handler(uint64_t error_code) {
     (void)error_code;
-    serial_write("[PANIC] GENERAL PROTECTION FAULT (GPF)\n");
-    gfx_clear(0x880000);
-    gfx_draw_string("KERNEL PANIC: EXCECAO 13 (GPF) MEMORIA PROTEGIDA", 120, 162, 0xFFFFFF);
-    gfx_swap_buffers();
+    serial_write("\n[PANIC CRITICO] EXCECAO 13: GENERAL PROTECTION FAULT (GPF)\n");
     while (1) asm volatile ("cli; hlt");
 }
 
 void exception14_handler(uint64_t error_code) {
     (void)error_code;
-    uint64_t cr2; asm volatile("mov %%cr2, %0" : "=r"(cr2));
-    serial_write("[PANIC] PAGE FAULT EM RING 0/3\n");
-    gfx_clear(0x880000);
-    gfx_draw_string("KERNEL PANIC: EXCECAO 14 (PAGE FAULT) VMM SHIELD", 120, 162, 0xFFFFFF);
-    gfx_swap_buffers();
+    serial_write("\n[PANIC CRITICO] EXCECAO 14: PAGE FAULT DETECTADO!\n");
     while (1) asm volatile ("cli; hlt");
 }
 
@@ -156,7 +143,7 @@ void keyboard_handler_main(void) {
             }
         }
     }
-    outb(0x20, 0x20); // Master PIC EOI
+    outb(0x20, 0x20);
 }
 
 void mouse_handler_main(void) {
@@ -187,6 +174,6 @@ void mouse_handler_main(void) {
                 break;
         }
     }
-    outb(0xA0, 0x20); // Slave PIC EOI
-    outb(0x20, 0x20); // Master PIC EOI
+    outb(0xA0, 0x20);
+    outb(0x20, 0x20);
 }

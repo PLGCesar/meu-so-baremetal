@@ -39,7 +39,13 @@ gdt64_pointer:
 .type _start, @function
 _start:
     mov $stack_top, %esp
-    mov %ebx, %edi
+    push %ebx  /* Salva ponteiro do Multiboot */
+
+    /* Zera as tabelas de paginação (Evita lixo da BSS mapear endereços invalidos) */
+    mov $pml4_table, %edi
+    mov $6144, %ecx
+    xor %eax, %eax
+    rep stosl
 
     mov $pdp_table, %eax
     or $7, %eax
@@ -97,7 +103,7 @@ long_mode_start:
     mov %ax, %gs
     mov %ax, %ss
 
-    mov %edi, %edi /* Limpa high 32 bits de %rdi */
+    pop %rdi /* Restaura o ponteiro multiboot de forma 100% limpa (Ring 0) */
 
     mov $1, %eax
     cpuid
