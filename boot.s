@@ -10,14 +10,18 @@
 .long FLAGS
 .long CHECKSUM
 
-.section .bss
+.section .data
 .align 4096
-pml4_table: .skip 4096
-pdp_table: .skip 4096
-pd_table: .skip 16384
+pml4_table:
+    .fill 4096, 1, 0
+pdp_table:
+    .fill 4096, 1, 0
+pd_table:
+    .fill 16384, 1, 0
 
 .align 16
-stack_bottom: .skip 131072 /* 128 KB Stack */
+stack_bottom:
+    .fill 131072, 1, 0 /* 128 KB Stack Protegida */
 stack_top:
 
 .section .rodata
@@ -39,13 +43,7 @@ gdt64_pointer:
 .type _start, @function
 _start:
     mov $stack_top, %esp
-    push %ebx  /* Salva ponteiro do Multiboot */
-
-    /* Zera as tabelas de paginação (Evita lixo da BSS mapear endereços invalidos) */
-    mov $pml4_table, %edi
-    mov $6144, %ecx
-    xor %eax, %eax
-    rep stosl
+    mov %ebx, %edi
 
     mov $pdp_table, %eax
     or $7, %eax
@@ -103,7 +101,7 @@ long_mode_start:
     mov %ax, %gs
     mov %ax, %ss
 
-    pop %rdi /* Restaura o ponteiro multiboot de forma 100% limpa (Ring 0) */
+    mov %edi, %edi /* Limpa os 32-bits superiores de %rdi */
 
     mov $1, %eax
     cpuid
