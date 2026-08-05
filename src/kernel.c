@@ -25,18 +25,18 @@ void kernel_main(multiboot_info_t* mbi) {
 
     memory_init(mbi);
     vmm_init();
-    
+    idt_init(); // IDT carregada cedo com default_irq_stub configurado
+
     gfx_init(mbi);
     vfs_init();
     ui_init();
 
     syscall_init();
     task_init();
-    idt_init();
 
     task_create(task_music_loop, "Chiptune_Synthesizer", 3);
 
-    // Habilita interrupções de hardware com segurança
+    // Habilita interrupções somente após todos os subsistemas estarem inicializados
     asm volatile ("sti");
 
     sound_startup();
