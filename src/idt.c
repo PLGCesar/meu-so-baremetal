@@ -134,12 +134,8 @@ void idt_init(void) {
 }
 
 void keyboard_handler_main(void) {
-    while (inb(0x64) & 0x01) {
-        uint8_t status = inb(0x64);
-        if (status & 0x20) {
-            mouse_handler_main();
-            return;
-        }
+    uint8_t status = inb(0x64);
+    if ((status & 0x01) && !(status & 0x20)) {
         uint8_t scancode = inb(0x60);
         if (scancode & 0x80) {
             uint8_t rel = scancode & 0x7F;
@@ -151,28 +147,36 @@ void keyboard_handler_main(void) {
                 char raw_c = shift_pressed ? scancode_ascii_shift[scancode] : scancode_ascii_normal[scancode];
                 if (!shift_pressed && caps_lock && raw_c >= 'a' && raw_c <= 'z') raw_c -= 32;
                 if (raw_c == '\'' || raw_c == '~' || raw_c == '^' || raw_c == '`') {
-                    if (active_dead_key == 0) { active_dead_key = raw_c; continue; }
-                    else if (active_dead_key == raw_c) { last_key_pressed = raw_c; active_dead_key = 0; continue; }
-                }
-                if (raw_c != 0) {
+                    if (active_dead_key == 0) { active_dead_key = raw_c; }
+                    else if (active_dead_key == raw_c) { last_key_pressed = raw_c; active_dead_key = 0; }
+                } else if (raw_c != 0) {
                     if (active_dead_key != 0) { last_key_pressed = apply_accent(active_dead_key, raw_c); active_dead_key = 0; }
                     else last_key_pressed = raw_c;
                 }
             }
         }
     }
-    outb(0x20, 0x20);
+    outb(0x20, 0x20); // Master PIC EOI
 }
 
 void mouse_handler_main(void) {
-    while (inb(0x64) & 0x01) {
-        uint8_t status = inb(0x64);
-        if (!(status & 0x20)) { keyboard_handler_main(); continue; }
+    uint8_t status = inb(0x64);
+    if ((status & 0x01) && (status & 0x20)) {
         uint8_t data = inb(0x60);
         switch (mouse_cycle) {
-            case 0: if (data & 0x08) { mouse_byte[0] = data; mouse_cycle++; } break;
-            case 1: mouse_byte[1] = data; mouse_cycle++; break;
-            case 2: mouse_byte[2] = data; mouse_cycle = 0;
+            case 0:
+                if (data & 0x08) {
+                    mouse_byte[0] = data;
+                    mouse_cycle++;
+                }
+                break;
+            case 1:
+                mouse_byte[1] = data;
+                mouse_cycle++;
+                break;
+            case 2:
+                mouse_byte[2] = data;
+                mouse_cycle = 0;
                 mouse_left_clicked = (mouse_byte[0] & 0x01);
                 mouse_x += (int8_t)mouse_byte[1];
                 mouse_y -= (int8_t)mouse_byte[2];
@@ -183,5 +187,6 @@ void mouse_handler_main(void) {
                 break;
         }
     }
-    outb(0xA0, 0x20); outb(0x20, 0x20);
+    outb(0xA0, 0x20); // Slave PIC EOI
+    outb(0x20, 0x20); // Master PIC EOI
 }

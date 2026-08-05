@@ -17,7 +17,7 @@ pdp_table: .skip 4096
 pd_table: .skip 16384
 
 .align 16
-stack_bottom: .skip 131072 /* 128 KB Stack para evitar Stack Overflow */
+stack_bottom: .skip 131072 /* 128 KB Stack */
 stack_top:
 
 .section .rodata
@@ -97,7 +97,7 @@ long_mode_start:
     mov %ax, %gs
     mov %ax, %ss
 
-    mov %edi, %edi /* Zero-extend EDI para RDI */
+    mov %edi, %edi /* Limpa high 32 bits de %rdi */
 
     mov $1, %eax
     cpuid
