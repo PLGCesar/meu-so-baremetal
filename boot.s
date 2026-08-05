@@ -95,6 +95,8 @@ long_mode_start:
     mov %ax, %gs
     mov %ax, %ss
 
+    mov %edi, %edi /* Garante ponteiro Multiboot limpo em 64-bits */
+
     mov $1, %eax
     cpuid
     and $0x18000000, %ecx
