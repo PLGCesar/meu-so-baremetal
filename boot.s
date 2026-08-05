@@ -15,7 +15,9 @@
 pml4_table: .skip 4096
 pdp_table: .skip 4096
 pd_table: .skip 16384
-stack_bottom: .skip 16384
+
+.align 16
+stack_bottom: .skip 131072 /* 128 KB Stack para evitar Stack Overflow */
 stack_top:
 
 .section .rodata
@@ -95,7 +97,7 @@ long_mode_start:
     mov %ax, %gs
     mov %ax, %ss
 
-    mov %edi, %edi /* Garante ponteiro Multiboot limpo em 64-bits */
+    mov %edi, %edi /* Zero-extend EDI para RDI */
 
     mov $1, %eax
     cpuid
