@@ -37,10 +37,7 @@ static const char* read_file(const char *name) {
 }
 
 void app_serial_send_custom(const char *msg) {
-    if (!msg) return;
-    serial_write_string("[GUEST APP USER MSG]: ");
-    serial_write_string(msg);
-    serial_write_string("\r\n");
+    serial_send_custom(msg);
 }
 
 void app_serial_process_host_command(const char *cmd) {
@@ -52,22 +49,22 @@ void app_serial_process_host_command(const char *cmd) {
 
         const char *content = read_file(filename);
         if (content) {
-            serial_write_string("=== INICIO DE ");
-            serial_write_string(filename);
-            serial_write_string(" ===\r\n");
-            serial_write_string(content);
-            serial_write_string("=== FIM DE ARQUIVO ===\r\n");
+            serial_write("=== INICIO DE ");
+            serial_write(filename);
+            serial_write(" ===\r\n");
+            serial_write(content);
+            serial_write("=== FIM DE ARQUIVO ===\r\n");
         } else {
-            serial_write_string("[ERRO CAPIVARA OS]: Arquivo '");
-            serial_write_string(filename);
-            serial_write_string("' nao foi encontrado.\r\n");
+            serial_write("[ERRO CAPIVARA OS]: Arquivo '");
+            serial_write(filename);
+            serial_write("' nao foi encontrado.\r\n");
         }
     } else if (str_starts_with(cmd, "send ")) {
         const char *msg = cmd + 5;
         app_serial_send_custom(msg);
     } else {
-        serial_write_string("[CAPIVARA OS SERIAL]: Comando '");
-        serial_write_string(cmd);
-        serial_write_string("' invalido.\r\nUso: cat <arquivo> ou send <mensagem>\r\n");
+        serial_write("[CAPIVARA OS SERIAL]: Comando '");
+        serial_write(cmd);
+        serial_write("' invalido.\r\nUso: cat <arquivo> ou send <mensagem>\r\n");
     }
 }

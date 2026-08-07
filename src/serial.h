@@ -10,7 +10,13 @@ int serial_init(void);
 int serial_has_data(void);
 char serial_read_char(void);
 void serial_write_char(char c);
+
+// Funcoes de ligacao com o Kernel (resolucao de erros de linkagem `ld`)
+void serial_write(const char *str);
 void serial_write_string(const char *str);
+const char* serial_get_log(void);
+void serial_send_custom(const char *msg);
+
 void serial_poll(void);
 
 #endif
