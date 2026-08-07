@@ -11,12 +11,15 @@ int serial_has_data(void);
 char serial_read_char(void);
 void serial_write_char(char c);
 
-// Funcoes de ligacao com o Kernel (resolucao de erros de linkagem `ld`)
+// Simbolos de ligacao com o Kernel (ld)
 void serial_write(const char *str);
 void serial_write_string(const char *str);
 const char* serial_get_log(void);
 void serial_send_custom(const char *msg);
+void app_serial_process_host_command(const char *cmd);
 
+// Debug e Polling Nao-Bloqueante
+void serial_mark(const char *label);
 void serial_poll(void);
 
 #endif
